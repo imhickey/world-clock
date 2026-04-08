@@ -3,7 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>World Clock — Team Timezones</title>
+<title>World Clock</title>
+<meta name="description" content="Beautiful responsive world clock with Flip, Analog, Globe, Map and Horizon views across 6 timezones.">
+<meta property="og:title" content="World Clock">
+<meta property="og:description" content="Beautiful responsive world clock with 5 visualizations across 6 timezones.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://imhickey.github.io/world-clock/">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -297,7 +303,7 @@ body.no-seconds .analog-second { display: none; }
 .map-dot-marker::after {
   content: '';
   position: absolute;
-  inset: -4px;
+  top: -4px; right: -4px; bottom: -4px; left: -4px;
   border-radius: 50%;
   border: 1px solid rgba(245,158,11,0.4);
   animation: mapRing 2s ease-in-out infinite;
@@ -460,6 +466,7 @@ body.no-seconds .analog-second { display: none; }
 }
 .credits a { color: #64748b; text-decoration: none; pointer-events: auto; }
 .credits a:hover { color: #94a3b8; }
+.switcher-sep { width: 1px; background: #334155; margin: 4px; }
 </style>
 </head>
 <body>
@@ -501,7 +508,7 @@ body.no-seconds .analog-second { display: none; }
 
 <!-- Credits -->
 <div class="credits">
-  By Ian Hickey · Earth at Night imagery: <a href="https://commons.wikimedia.org/wiki/File:The_earth_at_night.jpg" target="_blank">NASA / NOAA NGDC</a> (public domain)
+  By Ian Hickey · Earth at Night imagery: <a href="https://commons.wikimedia.org/wiki/File:The_earth_at_night.jpg" target="_blank" rel="noopener">NASA / NOAA NGDC</a> (public domain)
 </div>
 
 <!-- Switcher -->
@@ -511,7 +518,7 @@ body.no-seconds .analog-second { display: none; }
   <button data-view="globe">🌍 Globe</button>
   <button data-view="map">🗺️ Map</button>
   <button data-view="horizon">📊 Horizon</button>
-  <span style="width:1px;background:#334155;margin:4px 4px"></span>
+  <span class="switcher-sep"></span>
   <button id="sec-toggle">⏱️ Seconds</button>
 </div>
 
@@ -570,12 +577,18 @@ function fmtTime(t) {
 const views = document.querySelectorAll('.view');
 const buttons = document.querySelectorAll('.switcher button');
 
+let activeView = 'flip';
+
 function switchView(name) {
+  activeView = name;
   views.forEach(v => v.classList.toggle('active', v.id === `view-${name}`));
   buttons.forEach(b => b.classList.toggle('active', b.dataset.view === name));
   localStorage.setItem('worldclock-view', name);
+  tick();
 }
-buttons.forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
+buttons.forEach(b => {
+  if (b.dataset.view) b.addEventListener('click', () => switchView(b.dataset.view));
+});
 document.addEventListener('keydown', e => {
   if (e.key >= '1' && e.key <= '5') {
     switchView(['flip','analog','globe','map','horizon'][e.key-1]);
@@ -841,11 +854,13 @@ function updateHorizon() {
 
 // ── Main Tick ──
 function tick() {
-  updateFlip();
-  updateAnalog();
-  updateGlobe();
-  updateMap();
-  updateHorizon();
+  switch (activeView) {
+    case 'flip':    updateFlip(); break;
+    case 'analog':  updateAnalog(); break;
+    case 'globe':   updateGlobe(); break;
+    case 'map':     updateMap(); break;
+    case 'horizon': updateHorizon(); break;
+  }
 }
 tick();
 setInterval(tick, 1000);
