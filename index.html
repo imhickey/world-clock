@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>World Clock — Team Timezones</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-top: 2rem;
+  padding-bottom: 80px;
+  -webkit-overflow-scrolling: touch;
+}
+
+h1 {
+  font-size: clamp(0.9rem, 1.2vw, 1.4rem);
+  font-weight: 300;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: clamp(0.8rem, 1.5vh, 2rem);
+}
+
+/* ── View Switcher ── */
+.switcher {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  background: rgba(15,23,42,0.85);
+  border: 1px solid #334155;
+  border-radius: 28px;
+  padding: 5px 8px;
+  z-index: 100;
+  opacity: 0.4;
+  transition: opacity 0.3s;
+}
+@media (hover: hover) { .switcher:hover { opacity: 1; } }
+@media (hover: none) { .switcher { opacity: 1; } }
+
+.switcher button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-family: inherit;
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.switcher button:hover { color: #e2e8f0; background: rgba(51,65,85,0.5); }
+.switcher button.active {
+  background: #f59e0b;
+  color: #1a1a2e;
+  font-weight: 600;
+  border-color: #f59e0b;
+}
+
+/* ── Seconds toggle ── */
+body.no-seconds .sec-digit,
+body.no-seconds .sec-sep { display: none; }
+body.no-seconds .flip-sep { animation: none; opacity: 1; }
+body.no-seconds .analog-second { display: none; }
+
+/* ── Shared ── */
+.view { display: none; width: 95vw; }
+.view.active { display: flex; flex-direction: column; align-items: center; }
+.location-label {
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  font-weight: 500;
+}
+.date-info {
+  font-size: 0.72rem;
+  color: #475569;
+  letter-spacing: 0.05em;
+}
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+.dot.day   { background: #facc15; box-shadow: 0 0 6px #facc1580; }
+.dot.night { background: #6366f1; box-shadow: 0 0 6px #6366f180; }
+.daynight-icon { margin-right: 4px; font-size: 0.8em; }
+
+/* Day/night tint on cards — "Golden Hour / Blue Hour" */
+.clock-cell {
+  border-radius: 12px;
+  padding: 0.8rem;
+  border: 1px solid transparent;
+  transition: background 0.8s, border-color 0.8s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+.clock-cell.is-day {
+  background: rgba(251,191,36,0.07);
+  border-color: rgba(251,191,36,0.12);
+}
+.clock-cell.is-day .location-label { color: #d4a574; }
+.clock-cell.is-day .date-info { color: #92724a; }
+.clock-cell.is-day .analog-face { fill: #1a2d4a; stroke: rgba(251,191,36,0.22); }
+.clock-cell.is-day .analog-marker { stroke: #5a6a80; }
+.clock-cell.is-day .digit-tile { background: #1a2d4a; box-shadow: 0 2px 8px rgba(251,191,36,0.08); }
+
+.clock-cell.is-night {
+  background: rgba(99,102,241,0.06);
+  border-color: rgba(99,102,241,0.10);
+}
+.clock-cell.is-night .location-label { color: #7c8db5; }
+.clock-cell.is-night .date-info { color: #4a5580; }
+.clock-cell.is-night .analog-face { fill: #111827; stroke: rgba(99,102,241,0.22); }
+.clock-cell.is-night .analog-digital { color: #d4940a; }
+.clock-cell.is-night .digit-tile { background: #111827; box-shadow: 0 2px 8px rgba(99,102,241,0.06); }
+
+.globe-card {
+  transition: background 0.8s, border-color 0.8s;
+}
+.globe-card.is-day {
+  border-color: rgba(251,191,36,0.22);
+  background: rgba(251,191,36,0.06);
+}
+.globe-card.is-day .location-label { color: #d4a574; }
+.globe-card.is-night {
+  border-color: rgba(99,102,241,0.22);
+  background: rgba(99,102,241,0.05);
+}
+.globe-card.is-night .location-label { color: #7c8db5; }
+.globe-card.is-night .time-display { color: #d4940a; }
+
+.clock-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(1.5rem, 3vh, 3rem) clamp(2rem, 4vw, 5rem);
+  width: 90%;
+  max-width: 1600px;
+}
+
+/* ═══════════════════════════════════════
+   VIEW 1: FLIP CLOCK
+   ═══════════════════════════════════════ */
+.flip-row { display: flex; align-items: center; gap: 4px; }
+.flip-sep {
+  font-size: 2.2rem; font-weight: 700; color: #f59e0b;
+  line-height: 1; padding: 0 2px;
+  animation: blink 1s step-end infinite;
+}
+@keyframes blink { 50% { opacity: 0.3; } }
+
+.digit-tile {
+  width: clamp(48px, 5vw, 72px); height: clamp(68px, 7vw, 100px);
+  background: #16213e; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+.digit-tile::after {
+  content: ''; position: absolute;
+  left: 4px; right: 4px; top: 50%; height: 1px;
+  background: rgba(0,0,0,0.25); pointer-events: none;
+}
+.digit-tile span {
+  font-size: clamp(2.2rem, 3.5vw, 3.8rem); font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #f59e0b;
+  font-family: 'Consolas','Courier New',monospace;
+  line-height: 1; user-select: none;
+}
+.digit-tile.flip { animation: digitFlip 0.4s ease-in-out; }
+@keyframes digitFlip {
+  0%   { transform: perspective(300px) rotateX(0deg); }
+  50%  { transform: perspective(300px) rotateX(-90deg); opacity: 0.6; }
+  100% { transform: perspective(300px) rotateX(0deg); }
+}
+
+/* ═══════════════════════════════════════
+   VIEW 2: ANALOG WALL
+   ═══════════════════════════════════════ */
+.analog-clock { width: clamp(160px, 18vw, 280px); height: clamp(160px, 18vw, 280px); }
+.analog-face { fill: #16213e; stroke: #2d3a54; stroke-width: 2; }
+.analog-marker { stroke: #4a5568; stroke-width: 1.5; stroke-linecap: round; }
+.analog-hour   { stroke: #f59e0b; stroke-width: 5; stroke-linecap: round; }
+.analog-minute { stroke: #cbd5e1; stroke-width: 3; stroke-linecap: round; }
+.analog-second { stroke: #ef4444; stroke-width: 1.2; stroke-linecap: round; }
+.analog-center { fill: #f59e0b; }
+.analog-digital {
+  font-size: 1.1rem; font-weight: 600; color: #f59e0b;
+  font-family: 'Consolas','Courier New',monospace;
+  font-variant-numeric: tabular-nums;
+  margin-top: -0.2rem;
+}
+
+/* ═══════════════════════════════════════
+   VIEW 3: GLOBE
+   ═══════════════════════════════════════ */
+#view-globe .globe-wrap {
+  position: relative;
+  width: 100%; max-width: 1000px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 2rem 0;
+}
+.globe-sphere {
+  position: relative;
+  width: clamp(260px, 40vh, 420px); height: clamp(260px, 40vh, 420px); border-radius: 50%;
+  overflow: hidden; flex-shrink: 0;
+  background: url('img/earth-at-night.jpg') repeat-x center;
+  background-size: auto 100%;
+  animation: globeSpin 60s linear infinite;
+  box-shadow:
+    inset -40px -10px 60px rgba(0,0,0,0.7),
+    inset 10px 5px 30px rgba(0,0,0,0.3),
+    0 0 50px rgba(59,130,246,0.15),
+    0 0 100px rgba(59,130,246,0.06);
+}
+/* Atmospheric glow ring */
+.globe-sphere::before {
+  content: ''; position: absolute; top: -4px; right: -4px; bottom: -4px; left: -4px; border-radius: 50%;
+  border: 2px solid rgba(100,180,255,0.12);
+  pointer-events: none;
+}
+/* Day/night terminator overlay */
+#globe-terminator {
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0; border-radius: 50%;
+  pointer-events: none; z-index: 2;
+  transition: background 2s linear;
+}
+@keyframes globeSpin {
+  from { background-position: 0 center; }
+  to   { background-position: -1280px center; }
+}
+
+.globe-clocks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+  margin-left: 3rem;
+}
+.globe-card {
+  background: rgba(22,33,62,0.8);
+  border: 1px solid #2d3a54;
+  border-radius: 10px;
+  padding: 0.8rem 1.2rem;
+  min-width: 175px;
+}
+.globe-card .time-display {
+  font-size: 1.6rem; font-weight: 700;
+  color: #f59e0b;
+  font-family: 'Consolas','Courier New',monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══════════════════════════════════════
+   VIEW 4: MAP
+   ═══════════════════════════════════════ */
+#view-map { position: relative; }
+.map-container {
+  position: relative;
+  width: 95vw;
+  height: calc(100vh - 120px);
+  max-height: 50vw; /* maintain ~2:1 max aspect ratio */
+  background: url('img/earth-at-night.jpg') center / cover no-repeat;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 30px rgba(0,0,0,0.4);
+}
+/* Subtle vignette overlay */
+.map-container::before {
+  content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(15,23,42,0.5) 100%);
+  pointer-events: none; z-index: 1;
+}
+.map-dot-marker {
+  position: absolute;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #f59e0b;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  animation: mapPulse 2s ease-in-out infinite;
+}
+.map-dot-marker::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid rgba(245,158,11,0.4);
+  animation: mapRing 2s ease-in-out infinite;
+}
+@keyframes mapPulse {
+  0%,100% { transform: translate(-50%,-50%) scale(1); opacity: 1; }
+  50%     { transform: translate(-50%,-50%) scale(1.3); opacity: 0.8; }
+}
+@keyframes mapRing {
+  0%,100% { transform: scale(1); opacity: 0.4; }
+  50%     { transform: scale(2); opacity: 0; }
+}
+.map-label {
+  position: absolute;
+  transform: translate(-50%, 0);
+  text-align: center;
+  pointer-events: none;
+  z-index: 3;
+}
+.map-label .time-display {
+  font-size: clamp(1rem, 1.5vw, 1.6rem); font-weight: 700;
+  color: #f59e0b;
+  font-family: 'Consolas','Courier New',monospace;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 8px rgba(245,158,11,0.5), 0 1px 4px rgba(0,0,0,0.8);
+}
+.map-label .location-label {
+  font-size: 0.65rem;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+.map-label .date-info {
+  font-size: 0.6rem;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+/* ═══════════════════════════════════════
+   VIEW 5: HORIZON STRIP
+   ═══════════════════════════════════════ */
+#view-horizon .horizon-wrap {
+  width: 95%; max-width: 1100px;
+  display: flex; flex-direction: column; align-items: center; gap: 2rem;
+}
+.horizon-bar-area {
+  width: 100%; position: relative; height: 220px;
+}
+.horizon-bar {
+  width: 100%; height: 70px;
+  border-radius: 8px;
+  position: absolute; top: 80px;
+  background: linear-gradient(to right,
+    #0f172a 0%, #1e1b4b 18%, #5b21b6 22%, #f97316 25%,
+    #fbbf24 28%, #7dd3fc 35%, #bae6fd 45%, #e0f2fe 50%,
+    #bae6fd 55%, #7dd3fc 65%, #fbbf24 72%, #f97316 75%,
+    #5b21b6 78%, #1e1b4b 82%, #0f172a 100%
+  );
+  box-shadow: 0 0 30px rgba(125,211,252,0.1);
+}
+.horizon-hour-labels {
+  position: absolute; top: 155px;
+  width: 100%; display: flex; justify-content: space-between;
+  padding: 0 1%; font-size: 0.6rem; color: #475569;
+}
+.horizon-marker {
+  position: absolute; top: 0;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center;
+  transition: left 1s linear;
+}
+.horizon-marker .pin {
+  width: 2px; height: 220px;
+  background: linear-gradient(to bottom, transparent 0%, #f59e0b40 30%, #f59e0b 37%, #f59e0b 70%, #f59e0b40 80%, transparent 100%);
+}
+.horizon-marker .tag {
+  position: absolute; top: 8px;
+  background: rgba(22,33,62,0.92);
+  border: 1px solid #f59e0b40;
+  border-radius: 8px;
+  padding: 6px 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+.horizon-marker .tag .time-display {
+  font-size: 1rem; font-weight: 700; color: #f59e0b;
+  font-family: 'Consolas','Courier New',monospace;
+  font-variant-numeric: tabular-nums;
+}
+.horizon-marker .tag .location-label { font-size: 0.6rem; }
+
+/* ── Responsive ── */
+
+/* Tablet portrait & small laptops */
+@media (max-width: 900px) {
+  body { padding-top: 1.5rem; }
+  .clock-grid { grid-template-columns: repeat(2, 1fr); gap: 1.2rem 1.5rem; }
+  .globe-clocks { grid-template-columns: 1fr; }
+  #view-globe .globe-wrap { flex-direction: column; }
+  .globe-clocks { margin-left: 0; margin-top: 1.5rem; }
+  .globe-sphere { width: 240px; height: 240px; }
+  .horizon-marker .tag .location-label { font-size: 0.5rem; }
+  .horizon-marker .tag { padding: 4px 6px; }
+  .map-container { max-height: 60vw; }
+}
+
+/* Large phones / small tablets */
+@media (max-width: 680px) {
+  .clock-grid { grid-template-columns: 1fr; width: 92%; }
+  .map-label .time-display { font-size: 0.85rem; }
+  .map-label .location-label { font-size: 0.55rem; }
+  .map-label .date-info { display: none; }
+  .map-container { max-height: 70vw; }
+  .horizon-bar-area { height: 180px; }
+  .horizon-marker .pin { height: 180px; }
+  .horizon-marker .tag .time-display { font-size: 0.8rem; }
+  .horizon-marker .tag .location-label { font-size: 0.45rem; letter-spacing: 0.05em; }
+  .horizon-marker .tag { padding: 3px 5px; border-radius: 6px; }
+  .globe-card { padding: 0.6rem 0.8rem; min-width: 0; }
+  .globe-card .time-display { font-size: 1.2rem; }
+}
+
+/* Phones */
+@media (max-width: 480px) {
+  body { padding-top: 1rem; }
+  h1 { font-size: 0.75rem; margin-bottom: 0.6rem; }
+  .digit-tile { width: 38px; height: 54px; }
+  .digit-tile span { font-size: 2rem; }
+  .flip-sep { font-size: 1.6rem; }
+  .analog-clock { width: 140px; height: 140px; }
+  .analog-digital { font-size: 0.9rem; }
+  .globe-sphere { width: 200px; height: 200px; }
+  .map-label .time-display { font-size: 0.75rem; }
+  .map-label .location-label { font-size: 0.5rem; }
+  .map-dot-marker { width: 7px; height: 7px; }
+  .switcher { flex-wrap: wrap; justify-content: center; border-radius: 16px; gap: 4px; padding: 6px 10px; }
+  .switcher button { font-size: 0.68rem; padding: 8px 12px; min-height: 36px; }
+  .horizon-hour-labels { font-size: 0.5rem; }
+  .clock-cell { padding: 0.6rem; gap: 0.4rem; }
+}
+
+/* Very small phones (iPhone SE, etc.) */
+@media (max-width: 375px) {
+  .digit-tile { width: 32px; height: 46px; }
+  .digit-tile span { font-size: 1.7rem; }
+  .analog-clock { width: 120px; height: 120px; }
+  .globe-sphere { width: 170px; height: 170px; }
+  .switcher button { font-size: 0.62rem; padding: 6px 8px; }
+}
+
+/* Touch-friendly switcher */
+@media (pointer: coarse) {
+  .switcher { opacity: 1; }
+  .switcher button { min-height: 44px; min-width: 44px; touch-action: manipulation; }
+}
+
+/* Credits footer */
+.credits {
+  position: fixed; bottom: 58px; left: 50%; transform: translateX(-50%);
+  font-size: 0.55rem; color: #475569; letter-spacing: 0.03em;
+  text-align: center; z-index: 99; pointer-events: none;
+  opacity: 0.5;
+}
+.credits a { color: #64748b; text-decoration: none; pointer-events: auto; }
+.credits a:hover { color: #94a3b8; }
+</style>
+</head>
+<body>
+
+<h1 id="title">World Clock</h1>
+
+<!-- View 1: Flip Clock -->
+<div id="view-flip" class="view active">
+  <div class="clock-grid" id="flip-grid"></div>
+</div>
+
+<!-- View 2: Analog Wall -->
+<div id="view-analog" class="view">
+  <div class="clock-grid" id="analog-grid"></div>
+</div>
+
+<!-- View 3: Globe -->
+<div id="view-globe" class="view">
+  <div class="globe-wrap">
+    <div class="globe-sphere"><div id="globe-terminator"></div></div>
+    <div class="globe-clocks" id="globe-grid"></div>
+  </div>
+</div>
+
+<!-- View 4: Map -->
+<div id="view-map" class="view">
+  <div class="map-container" id="map-container"></div>
+</div>
+
+<!-- View 5: Horizon -->
+<div id="view-horizon" class="view">
+  <div class="horizon-wrap">
+    <div class="horizon-bar-area" id="horizon-area">
+      <div class="horizon-bar"></div>
+      <div class="horizon-hour-labels" id="horizon-hours"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Credits -->
+<div class="credits">
+  By Ian Hickey · Earth at Night imagery: <a href="https://commons.wikimedia.org/wiki/File:The_earth_at_night.jpg" target="_blank">NASA / NOAA NGDC</a> (public domain)
+</div>
+
+<!-- Switcher -->
+<div class="switcher">
+  <button data-view="flip" class="active">🔢 Flip</button>
+  <button data-view="analog">🕐 Analog</button>
+  <button data-view="globe">🌍 Globe</button>
+  <button data-view="map">🗺️ Map</button>
+  <button data-view="horizon">📊 Horizon</button>
+  <span style="width:1px;background:#334155;margin:4px 4px"></span>
+  <button id="sec-toggle">⏱️ Seconds</button>
+</div>
+
+<script>
+// ── Shared Data ──
+const ZONES = [
+  { label: 'US West Coast',    tz: 'America/Los_Angeles' },
+  { label: 'US East Coast',    tz: 'America/New_York'    },
+  { label: 'Dublin, Ireland',   tz: 'Europe/Dublin'       },
+  { label: 'Israel (IDC)',      tz: 'Asia/Jerusalem'      },
+  { label: 'India (IDC)',       tz: 'Asia/Kolkata'        },
+  { label: 'Sydney, Australia', tz: 'Australia/Sydney'    },
+];
+
+function getTimeParts(tz) {
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz, hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false
+  });
+  const p = fmt.formatToParts(now);
+  const h = p.find(x=>x.type==='hour').value;
+  const m = p.find(x=>x.type==='minute').value;
+  const s = p.find(x=>x.type==='second').value;
+  const dateFmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz, weekday:'short', day:'numeric', month:'short'
+  });
+  const hourNum = parseInt(h,10);
+  return { h, m, s, timeStr: `${h}:${m}:${s}`, dateStr: dateFmt.format(now), isDay: hourNum>=7 && hourNum<20 };
+}
+
+function dotHTML(isDay) {
+  const icon = isDay ? '☀️' : '🌙';
+  return `<span class="daynight-icon">${icon}</span><span class="dot ${isDay?'day':'night'}"></span>`;
+}
+
+// ── Seconds Toggle ──
+let showSeconds = localStorage.getItem('worldclock-seconds') === 'on';
+const secBtn = document.getElementById('sec-toggle');
+
+function applySecondsState() {
+  document.body.classList.toggle('no-seconds', !showSeconds);
+  secBtn.classList.toggle('active', showSeconds);
+}
+secBtn.addEventListener('click', () => {
+  showSeconds = !showSeconds;
+  localStorage.setItem('worldclock-seconds', showSeconds ? 'on' : 'off');
+  applySecondsState();
+});
+applySecondsState();
+
+function fmtTime(t) {
+  return showSeconds ? t.timeStr : `${t.h}:${t.m}`;
+}
+
+// ── View Switching ──
+const views = document.querySelectorAll('.view');
+const buttons = document.querySelectorAll('.switcher button');
+
+function switchView(name) {
+  views.forEach(v => v.classList.toggle('active', v.id === `view-${name}`));
+  buttons.forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  localStorage.setItem('worldclock-view', name);
+}
+buttons.forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
+document.addEventListener('keydown', e => {
+  if (e.key >= '1' && e.key <= '5') {
+    switchView(['flip','analog','globe','map','horizon'][e.key-1]);
+  }
+});
+
+// ═══════════════════════════════════════
+// VIEW 1: FLIP CLOCK
+// ═══════════════════════════════════════
+const flipDigits = [];
+ZONES.forEach(zone => {
+  const cell = document.createElement('div');
+  cell.className = 'clock-cell';
+  cell.innerHTML = `<div class="location-label">${zone.label}</div>`;
+  const row = document.createElement('div');
+  row.className = 'flip-row';
+  const d = {};
+  ['h0','h1','m0','m1','s0','s1'].forEach((k,j) => {
+    if (j===2) { const sep=document.createElement('span'); sep.className='flip-sep'; sep.textContent=':'; row.appendChild(sep); }
+    if (j===4) { const sep=document.createElement('span'); sep.className='flip-sep sec-sep'; sep.textContent=':'; row.appendChild(sep); }
+    const tile = document.createElement('div');
+    tile.className = 'digit-tile' + (k[0]==='s' ? ' sec-digit' : '');
+    tile.innerHTML = '<span>0</span>';
+    tile._val = '0';
+    row.appendChild(tile);
+    d[k] = tile;
+  });
+  const dateLine = document.createElement('div');
+  dateLine.className = 'date-info';
+  cell.appendChild(row);
+  cell.appendChild(dateLine);
+  document.getElementById('flip-grid').appendChild(cell);
+  flipDigits.push({ zone, d, dateLine, cell });
+});
+
+function updateFlip() {
+  flipDigits.forEach(({zone, d, dateLine, cell}) => {
+    const t = getTimeParts(zone.tz);
+    [['h0',t.h[0]],['h1',t.h[1]],['m0',t.m[0]],['m1',t.m[1]],['s0',t.s[0]],['s1',t.s[1]]].forEach(([k,v]) => {
+      const tile = d[k];
+      if (tile._val !== v) {
+        tile._val = v;
+        tile.classList.remove('flip'); void tile.offsetWidth; tile.classList.add('flip');
+        setTimeout(() => { tile.querySelector('span').textContent = v; }, 200);
+      }
+    });
+    dateLine.innerHTML = `${dotHTML(t.isDay)}${t.dateStr}`;
+    cell.classList.toggle('is-day', t.isDay);
+    cell.classList.toggle('is-night', !t.isDay);
+  });
+}
+
+// ═══════════════════════════════════════
+// VIEW 2: ANALOG WALL
+// ═══════════════════════════════════════
+const analogClocks = [];
+ZONES.forEach(zone => {
+  const cell = document.createElement('div');
+  cell.className = 'clock-cell';
+  cell.innerHTML = `<div class="location-label">${zone.label}</div>`;
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('viewBox','0 0 200 200');
+  svg.setAttribute('class','analog-clock');
+
+  // Face
+  const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  circle.setAttribute('cx','100'); circle.setAttribute('cy','100'); circle.setAttribute('r','95');
+  circle.setAttribute('class','analog-face');
+  svg.appendChild(circle);
+
+  // Hour markers
+  for (let i=0; i<12; i++) {
+    const ang = i * 30 * Math.PI / 180;
+    const isCardinal = i % 3 === 0;
+    const inner = isCardinal ? 78 : 82;
+    const x1 = 100 + inner * Math.sin(ang), y1 = 100 - inner * Math.cos(ang);
+    const x2 = 100 + 90 * Math.sin(ang), y2 = 100 - 90 * Math.cos(ang);
+    const mk = document.createElementNS('http://www.w3.org/2000/svg','line');
+    mk.setAttribute('x1',x1); mk.setAttribute('y1',y1);
+    mk.setAttribute('x2',x2); mk.setAttribute('y2',y2);
+    mk.setAttribute('class','analog-marker');
+    if (isCardinal) { mk.setAttribute('stroke-width','3'); mk.setAttribute('stroke','#64748b'); }
+    svg.appendChild(mk);
+  }
+
+  // Hands
+  const hourH = document.createElementNS('http://www.w3.org/2000/svg','line');
+  hourH.setAttribute('x1','100'); hourH.setAttribute('y1','100');
+  hourH.setAttribute('class','analog-hour');
+  const minH = document.createElementNS('http://www.w3.org/2000/svg','line');
+  minH.setAttribute('x1','100'); minH.setAttribute('y1','100');
+  minH.setAttribute('class','analog-minute');
+  const secH = document.createElementNS('http://www.w3.org/2000/svg','line');
+  secH.setAttribute('x1','100'); secH.setAttribute('y1','100');
+  secH.setAttribute('class','analog-second');
+  svg.appendChild(hourH); svg.appendChild(minH); svg.appendChild(secH);
+
+  const ctr = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  ctr.setAttribute('cx','100'); ctr.setAttribute('cy','100'); ctr.setAttribute('r','4');
+  ctr.setAttribute('class','analog-center');
+  svg.appendChild(ctr);
+
+  const digital = document.createElement('div');
+  digital.className = 'analog-digital';
+  const dateLine = document.createElement('div');
+  dateLine.className = 'date-info';
+
+  cell.appendChild(svg);
+  cell.appendChild(digital);
+  cell.appendChild(dateLine);
+  document.getElementById('analog-grid').appendChild(cell);
+  analogClocks.push({ zone, hourH, minH, secH, digital, dateLine, cell });
+});
+
+function updateAnalog() {
+  analogClocks.forEach(({zone, hourH, minH, secH, digital, dateLine, cell}) => {
+    const t = getTimeParts(zone.tz);
+    const hNum = parseInt(t.h), mNum = parseInt(t.m), sNum = parseInt(t.s);
+    const hAng = ((hNum%12)*30 + mNum*0.5) * Math.PI/180;
+    const mAng = (mNum*6 + sNum*0.1) * Math.PI/180;
+    const sAng = sNum*6 * Math.PI/180;
+
+    function setHand(el, ang, len) {
+      el.setAttribute('x2', 100 + len * Math.sin(ang));
+      el.setAttribute('y2', 100 - len * Math.cos(ang));
+    }
+    setHand(hourH, hAng, 50);
+    setHand(minH, mAng, 68);
+    setHand(secH, sAng, 75);
+    digital.textContent = fmtTime(t);
+    dateLine.innerHTML = `${dotHTML(t.isDay)}${t.dateStr}`;
+    cell.classList.toggle('is-day', t.isDay);
+    cell.classList.toggle('is-night', !t.isDay);
+  });
+}
+
+// ═══════════════════════════════════════
+// VIEW 3: GLOBE
+// ═══════════════════════════════════════
+const globeCards = [];
+ZONES.forEach(zone => {
+  const card = document.createElement('div');
+  card.className = 'globe-card';
+  card.innerHTML = `
+    <div class="location-label">${zone.label}</div>
+    <div class="time-display">00:00:00</div>
+    <div class="date-info"></div>
+  `;
+  document.getElementById('globe-grid').appendChild(card);
+  globeCards.push({ zone, card,
+    timeEl: card.querySelector('.time-display'),
+    dateEl: card.querySelector('.date-info')
+  });
+});
+
+function updateGlobe() {
+  globeCards.forEach(({zone, timeEl, dateEl, card}) => {
+    const t = getTimeParts(zone.tz);
+    timeEl.textContent = fmtTime(t);
+    dateEl.innerHTML = `${dotHTML(t.isDay)}${t.dateStr}`;
+    card.classList.toggle('is-day', t.isDay);
+    card.classList.toggle('is-night', !t.isDay);
+  });
+  // Update day/night terminator — sun angle rotates 360° over 24 hours
+  const now = new Date();
+  const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+  const sunAngle = ((utcH / 24) * 360 + 180) % 360;
+  const terminator = document.getElementById('globe-terminator');
+  if (terminator) {
+    terminator.style.background = `linear-gradient(${sunAngle}deg, rgba(0,5,25,0.80) 0%, rgba(0,8,35,0.55) 18%, rgba(0,10,50,0.20) 36%, transparent 46%, transparent 54%, rgba(255,220,120,0.07) 64%, rgba(255,200,90,0.12) 80%, rgba(255,180,60,0.16) 100%)`;
+  }
+}
+
+// ═══════════════════════════════════════
+// VIEW 4: MAP (NASA Earth at Night background)
+// ═══════════════════════════════════════
+// Equirectangular coordinates: x% = (lon+180)/360*100, y% = (90-lat)/180*100
+const MAP_POS = {
+  'America/Los_Angeles': { x: 17.2, y: 29.4 },
+  'America/New_York':    { x: 29.4, y: 27.2 },
+  'Europe/Dublin':       { x: 48.3, y: 20.6 },
+  'Asia/Jerusalem':      { x: 59.7, y: 32.2 },
+  'Asia/Kolkata':        { x: 74.4, y: 37.8 },
+  'Australia/Sydney':    { x: 91.9, y: 68.9 },
+};
+
+const mapContainer = document.getElementById('map-container');
+const mapLabels = [];
+ZONES.forEach(zone => {
+  const pos = MAP_POS[zone.tz];
+
+  // Pulsing dot
+  const dot = document.createElement('div');
+  dot.className = 'map-dot-marker';
+  dot.style.left = `${pos.x}%`;
+  dot.style.top = `${pos.y}%`;
+  mapContainer.appendChild(dot);
+
+  // Label (positioned above the dot)
+  const lbl = document.createElement('div');
+  lbl.className = 'map-label';
+  lbl.innerHTML = `
+    <div class="time-display">00:00</div>
+    <div class="location-label">${zone.label}</div>
+    <div class="date-info"></div>
+  `;
+  lbl.style.left = `${pos.x}%`;
+  lbl.style.top = `${pos.y - 12}%`;
+  mapContainer.appendChild(lbl);
+
+  mapLabels.push({ zone, lbl,
+    timeEl: lbl.querySelector('.time-display'),
+    dateEl: lbl.querySelector('.date-info')
+  });
+});
+
+function updateMap() {
+  mapLabels.forEach(({zone, timeEl, dateEl}) => {
+    const t = getTimeParts(zone.tz);
+    timeEl.textContent = fmtTime(t);
+    dateEl.innerHTML = `${dotHTML(t.isDay)}${t.dateStr}`;
+  });
+}
+
+// ═══════════════════════════════════════
+// VIEW 5: HORIZON STRIP
+// ═══════════════════════════════════════
+// Hour labels
+const hLabels = document.getElementById('horizon-hours');
+for (let i=0; i<=24; i+=3) {
+  const sp = document.createElement('span');
+  sp.textContent = `${String(i).padStart(2,'0')}:00`;
+  hLabels.appendChild(sp);
+}
+
+const horizonMarkers = [];
+ZONES.forEach(zone => {
+  const mk = document.createElement('div');
+  mk.className = 'horizon-marker';
+  mk.innerHTML = `
+    <div class="tag">
+      <div class="time-display">00:00</div>
+      <div class="location-label">${zone.label}</div>
+    </div>
+    <div class="pin"></div>
+  `;
+  document.getElementById('horizon-area').appendChild(mk);
+  horizonMarkers.push({ zone, mk,
+    timeEl: mk.querySelector('.time-display')
+  });
+});
+
+function updateHorizon() {
+  horizonMarkers.forEach(({zone, mk, timeEl}) => {
+    const t = getTimeParts(zone.tz);
+    const hNum = parseInt(t.h), mNum = parseInt(t.m), sNum = parseInt(t.s);
+    const pct = ((hNum + mNum/60 + sNum/3600) / 24) * 100;
+    mk.style.left = `${pct}%`;
+    timeEl.textContent = fmtTime(t);
+  });
+}
+
+// ── Main Tick ──
+function tick() {
+  updateFlip();
+  updateAnalog();
+  updateGlobe();
+  updateMap();
+  updateHorizon();
+}
+tick();
+setInterval(tick, 1000);
+
+// Restore saved view
+const saved = localStorage.getItem('worldclock-view');
+if (saved) switchView(saved);
+</script>
+</body>
+</html>
