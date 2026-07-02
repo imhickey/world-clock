@@ -282,6 +282,18 @@ Post-Phase-9 additions: Globe real-position moon with phase, adjustable
 solar time-lapse speed, solar view sized from both axes, lapse clamp fix
 for reduce-motion environments.
 
+Map view upgrade (post-v2.0, IMPLEMENTED): live day/night terminator
+(per-pixel sin-of-solar-altitude night mask on a 360×180 offscreen world,
+smoothstepped through the −12°..0° twilight band, cached per minute,
+blitted through the camera), sun & moon glyphs at their true geographic
+sub-points (ecliptic → RA/dec → GMST; apparent RA bakes in the equation
+of time) with ±180° seam wrapping and the moon lit toward the sun, plus
+cursor-anchored wheel-zoom / drag-pan / double-click reset (imagery on a
+transformed #map-pane; dots, labels and the overlay canvas stay in screen
+space so text stays crisp; pan clamped so the world always covers the
+frame). Settings: `mapTerminator`, `mapSunMoon` (Views group, ?fx-aware).
+Verified by verify-map.mjs (26 checks) + full regression sweep.
+
 ## Workflow
 
 - Branch per phase: `feature/p1-starfield`, etc.; merge to `main` when accepted.

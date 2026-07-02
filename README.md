@@ -6,7 +6,9 @@ A beautiful, responsive world clock with seven visualizations:
 - **Analog Wall** — clock faces with smooth sweeping second hands and comet trails
 - **Globe** — rotating Earth with a real day/night terminator (seasonal tilt),
   atmosphere glow, and the Moon at its true position with the correct phase
-- **Map** — NASA Earth at Night with timezone pins
+- **Map** — NASA Earth at Night with a live day/night terminator (real
+  sub-solar position, seasonal bow), sun & moon markers at the points where
+  they are overhead, and cursor-anchored wheel-zoom / drag-pan
 - **Horizon Strip** — 24-hour daylight bar with a glowing sun and moons
 - **Orbit** — cities orbit Earth as planets, positioned by their local solar time
 - **Solar System** — the real thing: planets at their true astronomical
