@@ -196,7 +196,7 @@ stores scrub state (always loads LIVE).
 tomorrow?"; all five+1 views stay consistent; reset returns to live cleanly.
 ~220 lines.
 
-### Phase 7 — Hover tooltips
+### Phase 7 — Hover tooltips (IMPLEMENTED)
 **Build:** one DOM tooltip element (styled like the demo's canvas card: dark
 panel, white title, wrapped body, edge-clamped). Hover/focus targets: flip
 cells, analog cells, globe cards, map dots/labels, horizon tags. Content:
@@ -210,7 +210,7 @@ depth-aware) feeding the same DOM tooltip.
 **Accept when:** keyboard-focusable (tab) as well as hover; never clipped at
 viewport edges; touch = tap toggles card. ~200 lines.
 
-### Phase 8 — Help overlay, share card, polish
+### Phase 8 — Help overlay, share card, polish (IMPLEMENTED)
 **Port:** the demo's help/about overlay wholesale: live mini-canvas banner
 (orbit-view render at fixed tilt), feature legend, and a controls table
 **generated from the same data structure that binds the keys** (single source
@@ -277,8 +277,10 @@ upgraded beyond the demo:
 - Settings: new "Solar System" group (lapse/clock/moons/belt/orbits/labels);
   `trails` relabeled "Motion trails".
 
-Phases 7 (DOM tooltips on other views) and 8 (help overlay + share card)
-remain open.
+Phases 7 and 8 were implemented after this (all phases complete).
+Post-Phase-9 additions: Globe real-position moon with phase, adjustable
+solar time-lapse speed, solar view sized from both axes, lapse clamp fix
+for reduce-motion environments.
 
 ## Workflow
 

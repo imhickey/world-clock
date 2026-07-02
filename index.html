@@ -298,6 +298,12 @@ body.analog-trails-on .analog-second { display: none; }
   position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%;
   pointer-events: none; z-index: 3;
 }
+/* Real-position moon — spans the whole globe-wrap so it can orbit OUTSIDE
+   the sphere's overflow clip. Removed from DOM when globeMoon is off. */
+#globe-moon-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 4;
+}
 @keyframes globeSpin {
   from { background-position: 0 center; }
   to   { background-position: -1280px center; }
@@ -585,7 +591,14 @@ body.analog-trails-on .analog-second { display: none; }
 .settings-group-title {
   font-size: 0.68rem; letter-spacing: 0.15em; text-transform: uppercase;
   color: #64748b; margin: 14px 0 8px;
+  display: flex; align-items: center; justify-content: space-between;
 }
+.settings-group-all {
+  background: transparent; border: 1px solid #334155; border-radius: 10px;
+  color: #7c8db5; font-size: 0.6rem; padding: 2px 8px; cursor: pointer;
+  letter-spacing: 0.05em; text-transform: uppercase; font-family: inherit;
+}
+.settings-group-all:hover { border-color: #f59e0b; color: #e2e8f0; }
 .settings-row {
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
@@ -617,6 +630,38 @@ body.analog-trails-on .analog-second { display: none; }
 }
 #settings-reset:hover { border-color: #f59e0b; color: #fff; }
 
+/* ── Help & About ── */
+#help-backdrop {
+  position: fixed; inset: 0; display: none; z-index: 200;
+  background: rgba(0,0,0,0.55);
+  align-items: center; justify-content: center;
+}
+#help-backdrop.open { display: flex; }
+#help-panel {
+  width: 520px; max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  background: #16213e; color: #e0e0e0;
+  border: 1px solid #334155; border-radius: 10px;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  font-size: 13px;
+}
+#help-banner { width: 100%; height: 110px; display: block; background: #0b1020; flex-shrink: 0; }
+#help-body h3 {
+  font-size: 0.72rem; letter-spacing: 0.15em; text-transform: uppercase;
+  color: #64748b; margin: 14px 0 6px; font-weight: 600;
+}
+#help-body p { color: #a8b3c7; line-height: 1.5; margin: 4px 0; font-size: 0.8rem; }
+.help-views-row { display: grid; grid-template-columns: 24px max-content 1fr; gap: 0 10px; margin: 4px 0; align-items: baseline; }
+.help-views-row .hv-name { font-weight: 600; color: #cbd5e1; white-space: nowrap; }
+.help-views-row .hv-desc { color: #8093ad; font-size: 0.76rem; }
+table.help-keys { border-collapse: collapse; margin: 4px 0 12px; }
+table.help-keys td { padding: 3px 12px 3px 0; vertical-align: top; color: #a8b3c7; font-size: 0.78rem; }
+table.help-keys td.hk-key {
+  color: #f59e0b; font-family: 'Consolas','Courier New',monospace;
+  font-weight: 700; white-space: nowrap; min-width: 80px;
+}
+
 /* ── FPS counter ── */
 #fps-counter {
   position: fixed; top: 10px; right: 12px; z-index: 100;
@@ -625,6 +670,28 @@ body.analog-trails-on .analog-second { display: none; }
   pointer-events: none; display: none;
 }
 #fps-counter.show { display: block; }
+
+/* ── Zone info tooltip ── */
+#wc-tooltip {
+  position: fixed; z-index: 180;
+  max-width: 270px;
+  background: rgba(12,18,32,0.95);
+  border: 1px solid #3a4d6e; border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.75rem; line-height: 1.5;
+  color: #c7d2e6;
+  pointer-events: none;
+  opacity: 0; transition: opacity 0.15s;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+#wc-tooltip.show { opacity: 1; }
+#wc-tooltip .tt-title { font-weight: 700; color: #fff; font-size: 0.82rem; margin-bottom: 2px; }
+#wc-tooltip .tt-time { color: #f59e0b; font-family: 'Consolas','Courier New',monospace; font-weight: 600; }
+#wc-tooltip .tt-dim { color: #7c8db5; }
+#wc-tooltip .tt-call { color: #86efac; }
+#wc-tooltip .tt-nocall { color: #64748b; }
+.has-tooltip { cursor: help; }
+.has-tooltip:focus-visible { outline: 1px solid rgba(245,158,11,0.5); outline-offset: 2px; border-radius: 8px; }
 
 /* ── Toast ── */
 #toast {
@@ -667,6 +734,7 @@ body.analog-trails-on .analog-second { display: none; }
   <div class="globe-wrap">
     <div class="globe-sphere"><div id="globe-terminator"></div><canvas id="globe-shade-canvas"></canvas></div>
     <div class="globe-clocks" id="globe-grid"></div>
+    <canvas id="globe-moon-canvas"></canvas>
   </div>
 </div>
 
@@ -717,6 +785,7 @@ body.analog-trails-on .analog-second { display: none; }
   <span class="switcher-sep"></span>
   <button id="sec-toggle">⏱️ Seconds</button>
   <span class="switcher-sep"></span>
+  <button id="help-toggle" title="Help & about (H)">❓</button>
   <button id="settings-toggle" title="Settings">⚙️</button>
 </div>
 
@@ -725,6 +794,9 @@ body.analog-trails-on .analog-second { display: none; }
 
 <!-- Toast -->
 <div id="toast"></div>
+
+<!-- Zone info tooltip -->
+<div id="wc-tooltip" role="tooltip"></div>
 
 <!-- Settings Panel -->
 <div id="settings-backdrop">
@@ -737,6 +809,18 @@ body.analog-trails-on .analog-second { display: none; }
     <div class="settings-footer">
       <button id="settings-reset">Reset to defaults</button>
     </div>
+  </div>
+</div>
+
+<!-- Help & About -->
+<div id="help-backdrop">
+  <div id="help-panel" role="dialog" aria-modal="true" aria-label="Help and about">
+    <canvas id="help-banner"></canvas>
+    <div class="settings-header">
+      <span>World Clock — Help &amp; About</span>
+      <button id="help-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="settings-body" id="help-body"></div>
   </div>
 </div>
 
@@ -756,17 +840,21 @@ const DEFAULTS = {
   orbitRings: true,
   orbitLabels: true,
   solarLapse: true,
+  solarLapseRate: 2, // sim-days per real second under time-lapse
   solarClock: true,
   solarMoons: true,
   solarBelt: true,
   solarOrbits: true,
   solarLabels: false,
+  globeMoon: true,
   tooltips: true, // generic key — Phase 7's DOM tooltips will reuse it
   timeControls: true,
   fps: false,
   reduceMotion: null, // null = follow OS prefers-reduced-motion; true/false = force
 };
-const AMBIENCE_KEYS = Object.keys(DEFAULTS).filter(k => k !== 'fps' && k !== 'reduceMotion');
+// Boolean feature flags only — non-boolean settings (reduceMotion tristate,
+// solarLapseRate number) must not be clobbered by the ?fx=off/all overrides.
+const AMBIENCE_KEYS = Object.keys(DEFAULTS).filter(k => typeof DEFAULTS[k] === 'boolean' && k !== 'fps');
 
 const Settings = (() => {
   let state = { ...DEFAULTS };
@@ -798,6 +886,22 @@ function effectiveReduceMotion() {
   const forced = Settings.get('reduceMotion');
   if (forced === true || forced === false) return forced;
   return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+// User-selectable Solar-view time-lapse rate (sim-days per real second at 1×
+// Clock speed). Lives here, not in the solar module, because SETTINGS_SCHEMA
+// references it at evaluation time.
+const SOLAR_LAPSE_RATES = [
+  { value: 1 / 24, label: '1 hour / sec' },
+  { value: 0.25,   label: '6 hours / sec' },
+  { value: 1,      label: '1 day / sec' },
+  { value: 2,      label: '2 days / sec' },
+  { value: 7,      label: '1 week / sec' },
+  { value: 30,     label: '1 month / sec' },
+];
+function solarLapseDaysPerSec() {
+  const v = Number(Settings.get('solarLapseRate'));
+  return Number.isFinite(v) && v > 0 ? v : 2;
 }
 
 // ═══════════════════════════════════════
@@ -1177,6 +1281,103 @@ window.addEventListener('resize', () => { if (isGlobeViewActive()) drawGlobeShad
 applyGlobeShadingVisibility();
 
 // ═══════════════════════════════════════
+// GLOBE MOON (real geocentric position + correct phase, scaled for visibility)
+// ═══════════════════════════════════════
+const globeMoonCanvas = document.getElementById('globe-moon-canvas');
+const globeMoonCtx = globeMoonCanvas.getContext('2d');
+const setGlobeMoonCanvasPresent = makeCanvasPresence(globeMoonCanvas);
+let globeMoonDpr = 1;
+
+// Low-precision mean ecliptic longitudes (degrees), good to a few degrees —
+// plenty for placing the moon on the right side of Earth and phasing it.
+function moonEclipticLonDeg(ms) {
+  const d = (ms - J2000_MS) / 86400000;
+  return ((218.316 + 13.176396 * d) % 360 + 360) % 360;
+}
+function sunEclipticLonDeg(ms) {
+  const d = (ms - J2000_MS) / 86400000;
+  return ((280.460 + 0.9856474 * d) % 360 + 360) % 360;
+}
+
+// Illuminated fraction + human phase name from elongation (moon − sun).
+function moonPhaseInfo(ms) {
+  const elongDeg = ((moonEclipticLonDeg(ms) - sunEclipticLonDeg(ms)) % 360 + 360) % 360;
+  const frac = (1 - Math.cos(elongDeg * Math.PI / 180)) / 2;
+  const names = ['New moon', 'Waxing crescent', 'First quarter', 'Waxing gibbous',
+                 'Full moon', 'Waning gibbous', 'Last quarter', 'Waning crescent'];
+  const name = names[Math.round(elongDeg / 45) % 8];
+  return { elongDeg, frac, name };
+}
+
+function drawGlobeMoon() {
+  globeMoonDpr = sizeCanvas(globeMoonCanvas);
+  const w = globeMoonCanvas.width, h = globeMoonCanvas.height;
+  globeMoonCtx.clearRect(0, 0, w, h);
+  if (!Settings.get('globeMoon') || w === 0 || h === 0) return;
+
+  const sphere = document.querySelector('.globe-sphere');
+  const cRect = globeMoonCanvas.getBoundingClientRect();
+  const sRect = sphere.getBoundingClientRect();
+  if (sRect.width === 0 || cRect.width === 0) return;
+  const cx = (sRect.left + sRect.width / 2 - cRect.left) * globeMoonDpr;
+  const cy = (sRect.top + sRect.height / 2 - cRect.top) * globeMoonDpr;
+  const R = (sRect.width / 2) * globeMoonDpr;
+
+  const ms = Clock.now().getTime();
+  const { elongDeg, frac, name } = moonPhaseInfo(ms);
+  const { dx, dy } = sunDirection(); // screen direction toward the sun (globe convention)
+
+  // Place the moon at its real elongation from the sun. Negated for the
+  // same counterclockwise-from-ecliptic-north convention as the Solar view
+  // (screen y is down, so unnegated angles would mirror the real sky).
+  const sunScreenAngle = Math.atan2(dy, dx);
+  const moonAngle = sunScreenAngle - elongDeg * Math.PI / 180;
+  const cam = { zoom: 1, tiltY: 0.35 };
+  const orbitR = R * 1.5; // real distance is ~60 Earth radii — compressed to stay on screen
+  const pos = projectCore(cx, cy, cam, orbitR, moonAngle);
+  const moonR = R * 0.15; // real size ratio is 0.27 at 60R away; scaled to read clearly
+
+  // Occlusion: hidden while passing behind the sphere
+  if (pos.depth < 0 && Math.hypot(pos.x - cx, pos.y - cy) < R + moonR * 0.3) return;
+
+  // Faint orbit hint
+  globeMoonCtx.lineWidth = globeMoonDpr;
+  globeMoonCtx.strokeStyle = 'rgba(148,163,184,0.10)';
+  globeMoonCtx.beginPath();
+  globeMoonCtx.ellipse(cx, cy, orbitR, orbitR * cam.tiltY, 0, 0, Math.PI * 2);
+  globeMoonCtx.stroke();
+
+  // Moon disc + phase: lighting it toward the real sun direction renders the
+  // correct phase automatically (full when opposite the sun, new when beside it).
+  const grad = globeMoonCtx.createRadialGradient(pos.x - moonR * 0.3, pos.y - moonR * 0.3, moonR * 0.2, pos.x, pos.y, moonR);
+  grad.addColorStop(0, '#d8dce4');
+  grad.addColorStop(1, '#9aa2ae');
+  globeMoonCtx.fillStyle = grad;
+  globeMoonCtx.beginPath(); globeMoonCtx.arc(pos.x, pos.y, moonR, 0, Math.PI * 2); globeMoonCtx.fill();
+  shadeSphereDirectional(globeMoonCtx, pos.x, pos.y, moonR, dx, dy);
+
+  // Phase caption
+  const fs = 10 * globeMoonDpr;
+  globeMoonCtx.font = `${fs}px "Segoe UI", sans-serif`;
+  globeMoonCtx.textAlign = 'center';
+  globeMoonCtx.fillStyle = 'rgba(148,163,184,0.55)';
+  globeMoonCtx.fillText(`${name} · ${Math.round(frac * 100)}%`, pos.x, pos.y + moonR + fs * 1.4);
+  globeMoonCtx.textAlign = 'left';
+}
+
+function applyGlobeMoonVisibility() {
+  setGlobeMoonCanvasPresent(Settings.get('globeMoon'));
+}
+
+function refreshGlobeMoon() {
+  applyGlobeMoonVisibility();
+  if (Settings.get('globeMoon') && isGlobeViewActive()) drawGlobeMoon();
+}
+
+window.addEventListener('resize', () => { if (isGlobeViewActive()) drawGlobeMoon(); });
+applyGlobeMoonVisibility();
+
+// ═══════════════════════════════════════
 // HORIZON SUN & MOON (traveling glow on the Horizon strip)
 // ═══════════════════════════════════════
 const horizonGlowCanvas = document.getElementById('horizon-glow-canvas');
@@ -1470,6 +1671,293 @@ timeScrubberEl.addEventListener('pointercancel', endScrubDrag);
 refreshTimeHud();
 
 // ═══════════════════════════════════════
+// ZONE INFO TOOLTIPS (hover/focus/tap cards on every view)
+// ═══════════════════════════════════════
+const wcTooltipEl = document.getElementById('wc-tooltip');
+let wcTooltipTarget = null; // element (or 'orbit') currently showing a tooltip
+
+// Approximate sunrise/sunset (NOAA simplified + equation of time; ±few min).
+// Returns UTC ms for the given location on the UTC day containing atMs, or a
+// polar marker when the sun never rises/sets at that latitude and season.
+function sunTimesUtc(lat, lon, atMs) {
+  const d = new Date(atMs);
+  const yearStart = Date.UTC(d.getUTCFullYear(), 0, 0);
+  const N = Math.floor((atMs - yearStart) / 86400000);
+  const B = 2 * Math.PI * (N - 81) / 364;
+  const eotMin = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);
+  const decl = 23.44 * Math.PI / 180 * Math.sin(2 * Math.PI * (N - 81) / 365);
+  const cosW = -Math.tan(lat * Math.PI / 180) * Math.tan(decl);
+  if (cosW >= 1) return { polar: 'night' };
+  if (cosW <= -1) return { polar: 'day' };
+  const halfDayH = Math.acos(cosW) * 12 / Math.PI;
+  const solarNoonUtcH = 12 - lon / 15 - eotMin / 60;
+  const dayStartUtc = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return {
+    rise: dayStartUtc + (solarNoonUtcH - halfDayH) * 3600000,
+    set:  dayStartUtc + (solarNoonUtcH + halfDayH) * 3600000,
+  };
+}
+
+function fmtOffset(mins) {
+  const sign = mins < 0 ? '-' : '+';
+  const a = Math.abs(mins);
+  return `UTC${sign}${Math.floor(a / 60)}${a % 60 ? ':' + String(a % 60).padStart(2, '0') : ''}`;
+}
+
+function fmtHoursHM(h) {
+  const totalMin = Math.round(h * 60);
+  return `${String(Math.floor(totalMin / 60)).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`;
+}
+
+function buildZoneTooltipHTML(zone) {
+  const now = Clock.now();
+  const t = getTimeParts(zone.tz);
+  const zoneOff = utcOffsetMinutes(zone.tz, now);
+  const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const viewerOff = utcOffsetMinutes(viewerTz, now);
+  const dMin = zoneOff - viewerOff;
+
+  let deltaStr;
+  if (dMin === 0) deltaStr = 'Same time as you';
+  else {
+    const a = Math.abs(dMin);
+    const hm = `${Math.floor(a / 60)}${a % 60 ? 'h ' + (a % 60) + 'm' : 'h'}`;
+    deltaStr = `${hm} ${dMin > 0 ? 'ahead of' : 'behind'} you`;
+  }
+
+  const sun = sunTimesUtc(zone.lat, zone.lon, now.getTime());
+  let sunStr;
+  if (sun.polar === 'day') sunStr = 'Sun up all day';
+  else if (sun.polar === 'night') sunStr = 'Sun down all day';
+  else {
+    const f = (ms) => new Intl.DateTimeFormat('en-GB', { timeZone: zone.tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms));
+    sunStr = `↑ ${f(sun.rise)} · ↓ ${f(sun.set)} <span class="tt-dim">(approx)</span>`;
+  }
+
+  // Overlap of 9:00–18:00 working hours at both ends, in the viewer's clock
+  const dH = dMin / 60;
+  const overlapStart = Math.max(9, 9 - dH);
+  const overlapEnd = Math.min(18, 18 - dH);
+  const callStr = (overlapEnd - overlapStart) >= 1
+    ? `<span class="tt-call">Call window: ${fmtHoursHM(overlapStart)}–${fmtHoursHM(overlapEnd)} your time</span>`
+    : '<span class="tt-nocall">No 9:00–18:00 overlap with you</span>';
+
+  return `
+    <div class="tt-title">${zone.label}</div>
+    <div><span class="tt-time">${t.timeStr}</span> ${t.isDay ? '☀️' : '🌙'} · ${t.dateStr}</div>
+    <div class="tt-dim">${fmtOffset(zoneOff)} · ${deltaStr}</div>
+    <div>${sunStr}</div>
+    <div>${callStr}</div>
+  `;
+}
+
+function positionTooltipNear(x, y) {
+  // (x, y) in viewport CSS px; place right of the point, clamped on all edges
+  const pad = 8;
+  const r = wcTooltipEl.getBoundingClientRect();
+  let left = x + 14;
+  let top = y - r.height / 2;
+  if (left + r.width > window.innerWidth - pad) left = x - 14 - r.width;
+  left = Math.max(pad, Math.min(left, window.innerWidth - r.width - pad));
+  top = Math.max(pad, Math.min(top, window.innerHeight - r.height - pad));
+  wcTooltipEl.style.left = `${left}px`;
+  wcTooltipEl.style.top = `${top}px`;
+}
+
+function showZoneTooltipAt(x, y, zone, target) {
+  if (!Settings.get('tooltips')) return;
+  wcTooltipEl.innerHTML = buildZoneTooltipHTML(zone);
+  wcTooltipEl.classList.add('show');
+  wcTooltipTarget = target;
+  positionTooltipNear(x, y);
+}
+
+function showZoneTooltipForEl(el, zone) {
+  const r = el.getBoundingClientRect();
+  showZoneTooltipAt(r.right, r.top + r.height / 2, zone, el);
+}
+
+function hideZoneTooltip() {
+  wcTooltipEl.classList.remove('show');
+  wcTooltipTarget = null;
+}
+
+function attachZoneTooltip(el, zone) {
+  el.classList.add('has-tooltip');
+  el.tabIndex = 0;
+  el.addEventListener('mouseenter', () => showZoneTooltipForEl(el, zone));
+  el.addEventListener('mouseleave', hideZoneTooltip);
+  el.addEventListener('focus', () => showZoneTooltipForEl(el, zone));
+  el.addEventListener('blur', hideZoneTooltip);
+  // Touch: tap toggles the card
+  el.addEventListener('click', () => {
+    if (wcTooltipTarget === el) hideZoneTooltip();
+    else showZoneTooltipForEl(el, zone);
+  });
+}
+
+// ═══════════════════════════════════════
+// HELP & ABOUT OVERLAY (controls table generated from KEY_BINDINGS)
+// ═══════════════════════════════════════
+const helpBackdrop = document.getElementById('help-backdrop');
+const helpBannerCanvas = document.getElementById('help-banner');
+const helpBannerCtx = helpBannerCanvas.getContext('2d');
+const helpOpen = () => helpBackdrop.classList.contains('open');
+let helpBuilt = false;
+
+const VIEWS_META = [
+  { emoji: '🔢', name: 'Flip',    desc: 'Retro flip clock across six timezones' },
+  { emoji: '🕐', name: 'Analog',  desc: 'Wall of sweeping analog clocks' },
+  { emoji: '🌍', name: 'Globe',   desc: 'Night-lights Earth with a real day/night terminator and the moon at its true position' },
+  { emoji: '🗺️', name: 'Map',    desc: 'NASA night map with pulsing city markers' },
+  { emoji: '📊', name: 'Horizon', desc: 'All six cities on one 24-hour daylight strip' },
+  { emoji: '🪐', name: 'Orbit',   desc: 'Cities orbit Earth at their local solar time' },
+  { emoji: '☀️', name: 'Solar',   desc: 'The real solar system — planets at their true positions today, with time-lapse' },
+];
+
+function buildHelpContent() {
+  const body = document.getElementById('help-body');
+  const viewRows = VIEWS_META.map(v =>
+    `<div class="help-views-row"><span>${v.emoji}</span><span class="hv-name">${v.name}</span><span class="hv-desc">${v.desc}</span></div>`
+  ).join('');
+  const keyRows = KEY_BINDINGS.map(b =>
+    `<tr><td class="hk-key">${b.keys}</td><td>${b.desc}</td></tr>`
+  ).join('');
+  body.innerHTML = `
+    <p>A world clock with seven visualizations across six timezones, borrowing
+    canvas techniques from the SkiaSharp solar-system demo. Hover any city for
+    an info card; scrub time to see the whole page follow.</p>
+    <h3>Views (keys 1–7)</h3>
+    ${viewRows}
+    <h3>Keyboard</h3>
+    <table class="help-keys">${keyRows}</table>
+    <p class="hv-desc">Every effect can be toggled in ⚙️ Settings ·
+    Earth-at-night imagery: NASA / NOAA NGDC (public domain)</p>
+  `;
+}
+
+// Decorative live banner: a tiny orbital system using the shared trail helper
+function drawHelpBanner(now) {
+  const dpr = sizeCanvas(helpBannerCanvas);
+  const w = helpBannerCanvas.width, h = helpBannerCanvas.height;
+  helpBannerCtx.clearRect(0, 0, w, h);
+  if (w === 0) return;
+  helpBannerCtx.fillStyle = '#0b1020';
+  helpBannerCtx.fillRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2;
+  const cam = { zoom: 1, tiltY: 0.45 };
+  const t = now / 1000;
+
+  // seeded starfield
+  const rand = mulberry32(11);
+  for (let i = 0; i < 40; i++) {
+    helpBannerCtx.fillStyle = `rgba(255,255,255,${(0.15 + rand() * 0.35).toFixed(3)})`;
+    helpBannerCtx.beginPath();
+    helpBannerCtx.arc(rand() * w, rand() * h, rand() * dpr + 0.3, 0, Math.PI * 2);
+    helpBannerCtx.fill();
+  }
+
+  // central glow
+  const glow = helpBannerCtx.createRadialGradient(cx, cy, 0, cx, cy, h * 0.3);
+  glow.addColorStop(0, 'rgba(255,200,96,0.9)');
+  glow.addColorStop(0.5, 'rgba(255,150,40,0.25)');
+  glow.addColorStop(1, 'rgba(255,120,30,0)');
+  helpBannerCtx.fillStyle = glow;
+  helpBannerCtx.beginPath(); helpBannerCtx.arc(cx, cy, h * 0.3, 0, Math.PI * 2); helpBannerCtx.fill();
+
+  // three orbiting bodies with tapered trails
+  const bodies = [
+    { r: h * 0.55, speed: 0.9,  phase: 0.5, size: 3.2, color: '#4F86C6' },
+    { r: h * 0.85, speed: 0.55, phase: 2.8, size: 4.2, color: '#CE9A5E' },
+    { r: h * 1.20, speed: 0.35, phase: 4.6, size: 3.6, color: '#9FE3DA' },
+  ];
+  const reduce = effectiveReduceMotion();
+  for (const b of bodies) {
+    const angle = (reduce ? 0 : t * b.speed) + b.phase;
+    const pts = [];
+    for (let i = 0; i < 20; i++) {
+      const a = angle - (1 - i / 19) * 0.9;
+      pts.push(projectCore(cx, cy, cam, b.r, a));
+    }
+    drawTaperedTrail(helpBannerCtx, pts, b.color, b.size * dpr * 0.9, 0.4);
+    const pos = projectCore(cx, cy, cam, b.r, angle);
+    helpBannerCtx.fillStyle = b.color;
+    helpBannerCtx.beginPath(); helpBannerCtx.arc(pos.x, pos.y, b.size * dpr, 0, Math.PI * 2); helpBannerCtx.fill();
+  }
+}
+
+function openHelp() {
+  if (!helpBuilt) { buildHelpContent(); helpBuilt = true; }
+  helpBackdrop.classList.add('open');
+  drawHelpBanner(performance.now());
+  Renderer.ensureLoop();
+}
+function closeHelp() { helpBackdrop.classList.remove('open'); }
+function toggleHelp() { helpOpen() ? closeHelp() : openHelp(); }
+
+Renderer.register('help-banner', { when: () => helpOpen() && !effectiveReduceMotion(), draw: drawHelpBanner });
+document.getElementById('help-toggle').addEventListener('click', toggleHelp);
+document.getElementById('help-close').addEventListener('click', closeHelp);
+helpBackdrop.addEventListener('mousedown', e => { if (e.target === helpBackdrop) closeHelp(); });
+
+// ═══════════════════════════════════════
+// SHARE CARD (S) — canvas-rendered og-image-style PNG download
+// ═══════════════════════════════════════
+function saveShareCard() {
+  const W = 1200, H = 630;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+
+  g.fillStyle = '#1a1a2e';
+  g.fillRect(0, 0, W, H);
+  const rand = mulberry32(7);
+  for (let i = 0; i < 150; i++) {
+    g.fillStyle = `rgba(255,255,255,${(0.1 + rand() * 0.4).toFixed(3)})`;
+    g.beginPath(); g.arc(rand() * W, rand() * H, rand() * 1.3 + 0.3, 0, Math.PI * 2); g.fill();
+  }
+
+  g.textAlign = 'center';
+  g.fillStyle = '#64748b';
+  g.font = '300 34px "Segoe UI", sans-serif';
+  g.fillText('W O R L D   C L O C K', W / 2, 84);
+
+  const colX = [220, 600, 980];
+  const rowY = [220, 420];
+  ZONES.forEach((zone, i) => {
+    const x = colX[i % 3], y = rowY[Math.floor(i / 3)];
+    const t = getTimeParts(zone.tz);
+    g.fillStyle = '#94a3b8';
+    g.font = '600 15px "Segoe UI", sans-serif';
+    g.fillText(zone.label.toUpperCase(), x, y - 52);
+    g.fillStyle = '#f59e0b';
+    g.font = '700 52px Consolas, "Courier New", monospace';
+    g.fillText(`${t.h}:${t.m}`, x, y);
+    g.fillStyle = t.isDay ? '#facc15' : '#6366f1';
+    g.beginPath(); g.arc(x - 44, y + 28, 5, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#475569';
+    g.font = '14px "Segoe UI", sans-serif';
+    g.fillText(t.dateStr, x + 8, y + 33);
+  });
+
+  const now = Clock.now();
+  g.fillStyle = '#475569';
+  g.font = '15px "Segoe UI", sans-serif';
+  const footer = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    + (Clock.live() ? '' : '  ·  SIMULATED TIME');
+  g.fillText(footer, W / 2, 566);
+  g.textAlign = 'left';
+
+  const pad = (n) => String(n).padStart(2, '0');
+  const name = `world-clock-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}.png`;
+  const a = document.createElement('a');
+  a.href = c.toDataURL('image/png');
+  a.download = name;
+  a.click();
+  showToast(`Saved ${name}`);
+}
+
+// ═══════════════════════════════════════
 // SETTINGS PANEL
 // ═══════════════════════════════════════
 const SETTINGS_SCHEMA = [
@@ -1482,6 +1970,7 @@ const SETTINGS_SCHEMA = [
   { group: 'Views', items: [
     { key: 'globeShading', label: 'Globe: 3D shading', type: 'bool', onChange: refreshGlobeShading },
     { key: 'atmosphere', label: 'Globe: atmosphere glow', type: 'bool', onChange: refreshGlobeShading },
+    { key: 'globeMoon', label: 'Globe: real-position moon', type: 'bool', onChange: refreshGlobeMoon },
     { key: 'horizonGlow', label: 'Horizon: sun & moon glow', type: 'bool', onChange: refreshHorizonGlow },
     { key: 'trails', label: 'Motion trails', type: 'bool', onChange: () => { refreshAnalogTrails(); refreshOrbit(); refreshSolar(); } },
     { key: 'orbitRings', label: 'Orbit: guide rings', type: 'bool', onChange: refreshOrbit },
@@ -1489,6 +1978,7 @@ const SETTINGS_SCHEMA = [
   ]},
   { group: 'Solar System', items: [
     { key: 'solarLapse', label: 'Time-lapse motion', type: 'bool', onChange: () => { solarLapseMs = 0; refreshSolar(); } },
+    { key: 'solarLapseRate', label: 'Time-lapse speed', type: 'select', options: SOLAR_LAPSE_RATES, onChange: refreshSolar },
     { key: 'solarClock', label: 'Faded background clock', type: 'bool', onChange: refreshSolar },
     { key: 'solarMoons', label: 'Moons', type: 'bool', onChange: refreshSolar },
     { key: 'solarBelt', label: 'Asteroid belt', type: 'bool', onChange: refreshSolar },
@@ -1496,7 +1986,7 @@ const SETTINGS_SCHEMA = [
     { key: 'solarLabels', label: 'Planet labels', type: 'bool', onChange: refreshSolar },
   ]},
   { group: 'Interaction', items: [
-    { key: 'tooltips', label: 'Hover facts (Solar view)', type: 'bool', onChange: refreshSolar },
+    { key: 'tooltips', label: 'Hover info cards', type: 'bool', onChange: () => { hideZoneTooltip(); refreshSolar(); } },
     { key: 'timeControls', label: 'Time-travel controls', type: 'bool', onChange: onTimeControlsToggle },
   ]},
   { group: 'Performance', items: [
@@ -1510,7 +2000,28 @@ function buildSettingsPanel() {
   SETTINGS_SCHEMA.forEach(({ group, items }) => {
     const title = document.createElement('div');
     title.className = 'settings-group-title';
-    title.textContent = group;
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'settings-group-name';
+    nameSpan.textContent = group;
+    title.appendChild(nameSpan);
+
+    // Per-group bulk toggle for the boolean rows
+    const bools = items.filter(i => i.type === 'bool');
+    if (bools.length > 1) {
+      const anyOff = bools.some(i => !Settings.get(i.key));
+      const allBtn = document.createElement('button');
+      allBtn.className = 'settings-group-all';
+      allBtn.textContent = anyOff ? 'all on' : 'all off';
+      allBtn.addEventListener('click', () => {
+        bools.forEach(i => {
+          Settings.set(i.key, anyOff);
+          if (i.onChange) i.onChange();
+        });
+        buildSettingsPanel(); // re-render switches + this button's label
+      });
+      title.appendChild(allBtn);
+    }
+
     body.appendChild(title);
     items.forEach(item => body.appendChild(buildSettingsRow(item)));
   });
@@ -1538,7 +2049,10 @@ function buildSettingsRow(item) {
     row.appendChild(sw);
   } else if (item.type === 'tristate') {
     const sel = document.createElement('select');
-    [['', 'System default'], ['on', 'On'], ['off', 'Off']].forEach(([v, l]) => {
+    // Show what "System default" currently resolves to, so users with an
+    // OS-level Reduce Motion setting can see why animations are off.
+    const sysState = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'on' : 'off';
+    [['', `System default (${sysState})`], ['on', 'On'], ['off', 'Off']].forEach(([v, l]) => {
       const opt = document.createElement('option');
       opt.value = v; opt.textContent = l;
       sel.appendChild(opt);
@@ -1548,6 +2062,19 @@ function buildSettingsRow(item) {
     sel.addEventListener('change', () => {
       const val = sel.value === 'on' ? true : sel.value === 'off' ? false : null;
       Settings.set(item.key, val);
+      if (item.onChange) item.onChange();
+    });
+    row.appendChild(sel);
+  } else if (item.type === 'select') {
+    const sel = document.createElement('select');
+    item.options.forEach(({ value, label }) => {
+      const opt = document.createElement('option');
+      opt.value = String(value); opt.textContent = label;
+      sel.appendChild(opt);
+    });
+    sel.value = String(Settings.get(item.key));
+    sel.addEventListener('change', () => {
+      Settings.set(item.key, Number(sel.value));
       if (item.onChange) item.onChange();
     });
     row.appendChild(sel);
@@ -1570,13 +2097,14 @@ document.getElementById('settings-reset').addEventListener('click', () => {
 });
 
 // ── Shared Data ──
+// lat/lon power the tooltip sunrise/sunset estimates (match the MAP_POS dots)
 const ZONES = [
-  { label: 'US West Coast',    tz: 'America/Los_Angeles' },
-  { label: 'US East Coast',    tz: 'America/New_York'    },
-  { label: 'Dublin, Ireland',   tz: 'Europe/Dublin'       },
-  { label: 'Israel (IDC)',      tz: 'Asia/Jerusalem'      },
-  { label: 'India (IDC)',       tz: 'Asia/Kolkata'        },
-  { label: 'Sydney, Australia', tz: 'Australia/Sydney'    },
+  { label: 'US West Coast',    tz: 'America/Los_Angeles', lat: 34.05,  lon: -118.24 },
+  { label: 'US East Coast',    tz: 'America/New_York',    lat: 40.71,  lon: -74.01  },
+  { label: 'Dublin, Ireland',   tz: 'Europe/Dublin',       lat: 53.35,  lon: -6.26   },
+  { label: 'Israel (IDC)',      tz: 'Asia/Jerusalem',      lat: 31.78,  lon: 35.22   },
+  { label: 'India (IDC)',       tz: 'Asia/Kolkata',        lat: 22.57,  lon: 88.36   },
+  { label: 'Sydney, Australia', tz: 'Australia/Sydney',    lat: -33.87, lon: 151.21  },
 ];
 
 function getTimeParts(tz) {
@@ -1640,39 +2168,60 @@ function switchView(name) {
 buttons.forEach(b => {
   if (b.dataset.view) b.addEventListener('click', () => switchView(b.dataset.view));
 });
+// ═══════════════════════════════════════
+// KEYBOARD BINDINGS (single source of truth — the help overlay renders
+// its controls table from this same array, so docs can't drift from behavior)
+// ═══════════════════════════════════════
+// Time-travel entries are inert (and Clock stays LIVE) when the timeControls
+// setting is off — each run function re-checks it internally.
+const KEY_BINDINGS = [
+  { keys: '1 – 7', desc: 'Switch view',
+    match: e => e.key >= '1' && e.key <= '7',
+    run: e => switchView(['flip','analog','globe','map','horizon','orbit','solar'][e.key - 1]) },
+  { keys: 'Space', desc: 'Pause / resume time', guardTyping: true, prevent: true,
+    match: e => e.key === ' ', run: () => togglePause() },
+  { keys: '+ / −', desc: 'Speed up / slow down time (0.1×–512×)',
+    match: e => ['+', '=', '-', '_'].includes(e.key),
+    run: e => scaleClockSpeed(e.key === '+' || e.key === '=' ? 2 : 0.5) },
+  { keys: 'R', desc: 'Reverse time',
+    match: e => e.key === 'r' || e.key === 'R', run: () => reverseClockSpeed() },
+  { keys: ', / .', desc: 'Step ±1 minute',
+    match: e => e.key === ',' || e.key === '.',
+    run: e => stepClockMinutes(e.key === ',' ? -1 : 1) },
+  { keys: '0', desc: 'Back to LIVE',
+    match: e => e.key === '0', run: () => resetClockToLive() },
+  { keys: 'S', desc: 'Save a share-card image',
+    match: e => e.key === 's' || e.key === 'S', run: () => saveShareCard() },
+  { keys: 'F', desc: 'Toggle the FPS counter',
+    match: e => e.key === 'f' || e.key === 'F',
+    run: () => { Settings.set('fps', !Settings.get('fps')); applyFpsState(); } },
+  { keys: 'H / ?', desc: 'Help & about',
+    match: e => e.key === 'h' || e.key === 'H' || e.key === '?' || e.key === 'F1',
+    prevent: true, run: () => toggleHelp() },
+  { keys: 'Esc', desc: 'Close panels', docOnly: true, match: () => false, run: () => {} },
+];
+
 document.addEventListener('keydown', e => {
   if (settingsOpen()) {
     if (e.key === 'Escape') closeSettings();
     return;
   }
-  if (e.key >= '1' && e.key <= '7') {
-    switchView(['flip','analog','globe','map','horizon','orbit','solar'][e.key-1]);
+  if (helpOpen()) {
+    if (e.key === 'Escape' || e.key === 'h' || e.key === 'H' || e.key === 'F1') {
+      e.preventDefault();
+      closeHelp();
+    }
     return;
   }
-  if (e.key === 'f' || e.key === 'F') {
-    Settings.set('fps', !Settings.get('fps'));
-    applyFpsState();
+  for (const b of KEY_BINDINGS) {
+    if (!b.match(e)) continue;
+    if (b.guardTyping) {
+      const tag = document.activeElement && document.activeElement.tagName;
+      if (['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'A'].includes(tag)) return; // don't hijack keyboard activation
+    }
+    if (b.prevent) e.preventDefault();
+    b.run(e);
     return;
-  }
-  // Time-travel controls — all inert (and Clock stays LIVE) when the
-  // timeControls setting is off; each handler below re-checks it too.
-  if (e.key === ' ') {
-    const tag = document.activeElement && document.activeElement.tagName;
-    if (['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'A'].includes(tag)) return; // don't hijack keyboard activation
-    e.preventDefault();
-    togglePause();
-  } else if (e.key === '+' || e.key === '=') {
-    scaleClockSpeed(2);
-  } else if (e.key === '-' || e.key === '_') {
-    scaleClockSpeed(0.5);
-  } else if (e.key === 'r' || e.key === 'R') {
-    reverseClockSpeed();
-  } else if (e.key === ',') {
-    stepClockMinutes(-1);
-  } else if (e.key === '.') {
-    stepClockMinutes(1);
-  } else if (e.key === '0') {
-    resetClockToLive();
   }
 });
 
@@ -1701,6 +2250,7 @@ ZONES.forEach(zone => {
   dateLine.className = 'date-info';
   cell.appendChild(row);
   cell.appendChild(dateLine);
+  attachZoneTooltip(cell, zone);
   document.getElementById('flip-grid').appendChild(cell);
   flipDigits.push({ zone, d, dateLine, cell });
 });
@@ -1786,6 +2336,7 @@ ZONES.forEach(zone => {
   cell.appendChild(svg);
   cell.appendChild(digital);
   cell.appendChild(dateLine);
+  attachZoneTooltip(cell, zone);
   document.getElementById('analog-grid').appendChild(cell);
   analogClocks.push({ zone, svg, hourH, minH, secH, digital, dateLine, cell });
 });
@@ -1825,6 +2376,7 @@ ZONES.forEach(zone => {
     <div class="time-display">00:00:00</div>
     <div class="date-info"></div>
   `;
+  attachZoneTooltip(card, zone);
   document.getElementById('globe-grid').appendChild(card);
   globeCards.push({ zone, card,
     timeEl: card.querySelector('.time-display'),
@@ -1852,6 +2404,7 @@ function updateGlobe() {
       terminator.style.background = `linear-gradient(${sunAngle}deg, rgba(0,5,25,0.80) 0%, rgba(0,8,35,0.55) 18%, rgba(0,10,50,0.20) 36%, transparent 46%, transparent 54%, rgba(255,220,120,0.07) 64%, rgba(255,200,90,0.12) 80%, rgba(255,180,60,0.16) 100%)`;
     }
   }
+  if (Settings.get('globeMoon')) drawGlobeMoon();
 }
 
 // ═══════════════════════════════════════
@@ -1877,6 +2430,7 @@ ZONES.forEach(zone => {
   dot.className = 'map-dot-marker';
   dot.style.left = `${pos.x}%`;
   dot.style.top = `${pos.y}%`;
+  attachZoneTooltip(dot, zone);
   mapContainer.appendChild(dot);
 
   // Label (positioned above the dot)
@@ -1927,6 +2481,7 @@ ZONES.forEach(zone => {
     </div>
     <div class="pin"></div>
   `;
+  attachZoneTooltip(mk.querySelector('.tag'), zone);
   document.getElementById('horizon-area').appendChild(mk);
   horizonMarkers.push({ zone, mk,
     timeEl: mk.querySelector('.time-display')
@@ -1980,7 +2535,10 @@ function utcOffsetMinutes(tz, at) {
   const p = fmt.formatToParts(at);
   const get = (t) => parseInt(p.find(x => x.type === t).value, 10);
   const asUTC = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'));
-  return (asUTC - at.getTime()) / 60000;
+  // Round: the formatted wall-clock is truncated to the minute while
+  // at.getTime() carries seconds — the raw quotient is fractional, which
+  // leaks into tooltip text ("UTC-7:0.52…") if not rounded.
+  return Math.round((asUTC - at.getTime()) / 60000);
 }
 
 // Orbit angle for a zone at a given instant. Noon local solar time -> angle 0
@@ -2185,6 +2743,30 @@ function refreshOrbit() {
   Renderer.ensureLoop();
 }
 
+// Hover info cards for the canvas-drawn cities (mirrors drawOrbit's geometry)
+orbitCanvas.addEventListener('mousemove', e => {
+  if (!Settings.get('tooltips') || !isOrbitViewActive()) return;
+  const rect = orbitCanvas.getBoundingClientRect();
+  if (rect.width === 0) return;
+  const px = (e.clientX - rect.left) * (orbitCanvas.width / rect.width);
+  const py = (e.clientY - rect.top) * (orbitCanvas.height / rect.height);
+  const w = orbitCanvas.width, h = orbitCanvas.height;
+  const maxR = Math.min(w, h) * 0.42;
+  const cam = { zoom: 1, tiltY: 0.55 };
+  const planetR = maxR * 0.045;
+  const cities = buildOrbitCities(maxR, Clock.now());
+  let hit = null, best = -Infinity;
+  for (const city of cities) {
+    const pos = projectCore(w / 2, h / 2, cam, city.orbitPx, city.angle);
+    const dx = pos.x - px, dy = pos.y - py;
+    const pr = planetR * 1.6;
+    if (dx * dx + dy * dy <= pr * pr && pos.depth > best) { hit = city; best = pos.depth; }
+  }
+  if (hit) showZoneTooltipAt(e.clientX, e.clientY, hit.zone, 'orbit');
+  else if (wcTooltipTarget === 'orbit') hideZoneTooltip();
+});
+orbitCanvas.addEventListener('mouseleave', () => { if (wcTooltipTarget === 'orbit') hideZoneTooltip(); });
+
 Renderer.register('orbit', { when: orbitAnimActive, draw: drawOrbit });
 window.addEventListener('resize', () => { if (isOrbitViewActive()) drawOrbit(performance.now()); });
 
@@ -2198,10 +2780,10 @@ function updateOrbit() {
 const solarCanvas = document.getElementById('solar-canvas');
 const solarCtx = solarCanvas.getContext('2d');
 let solarDpr = 1;
+let solarSizeK = 1;     // body-size scale factor derived from maxR (set in drawSolar)
+let solarMaxRLast = 0;  // last computed maxR, exposed for tests
 
 const J2000_MS = 946728000000; // 2000-01-01T12:00Z
-const SOLAR_LAPSE_DAYS_PER_SEC = 2;   // 1 real second ≈ 2 sim days at 1× Clock speed
-const SOLAR_LAPSE_K = SOLAR_LAPSE_DAYS_PER_SEC * 86400; // sim-time multiplier while lapse is on
 const SOLAR_MOON_MAX_REV_PER_SEC = 0.4; // display cap under lapse (see solarMoonAngle)
 const SOLAR_TRAIL_SPAN = 0.55;  // radians of orbit arc behind each planet
 const SOLAR_TRAIL_SAMPLES = 28;
@@ -2295,7 +2877,7 @@ function solarScreenAngle(theta) { return -theta; }
 // true speed would be a 6 rev/s blur); with lapse off, true periods are used.
 function solarMoonAngle(moon, ms, lapseOn) {
   const T = Math.abs(moon.T);
-  const minT = SOLAR_LAPSE_DAYS_PER_SEC / SOLAR_MOON_MAX_REV_PER_SEC; // = 5 days
+  const minT = solarLapseDaysPerSec() / SOLAR_MOON_MAX_REV_PER_SEC; // 5 days at the 2 d/s default
   const Tdisp = lapseOn ? Math.max(T, minT) : T;
   const sign = moon.T < 0 ? -1 : 1;
   const phase = (hashStringToSeed(moon.name) % 360) * Math.PI / 180;
@@ -2322,11 +2904,15 @@ function advanceSolarLapse() {
     // random-walk of the sim date. Intent gives an exact 0 when paused, and
     // also means a ±24h scrub jump passes through 1:1 instead of being
     // K-amplified into a ±5-year solar leap.
-    // Stale-delta guard: after a long real-time gap (other view, hidden tab),
-    // resync without accumulating — otherwise returning after an hour would
-    // leap the sim ~20 years.
-    if (dtReal <= 250 && Settings.get('solarLapse')) {
-      solarLapseMs += dtReal * Clock.speed * (SOLAR_LAPSE_K - 1);
+    // Stale-delta CLAMP (not skip): a long real-time gap (other view, hidden
+    // tab) contributes at most one 250ms bite instead of leaping years ahead.
+    // Clamping rather than skipping matters for reduce-motion users: there
+    // the only draw path is the 1Hz tick (dtReal ≈ 1000ms), and a skip-guard
+    // would freeze the lapse entirely — the "solar system isn't animating"
+    // bug. With the clamp it advances at a gentle quarter rate instead.
+    if (Settings.get('solarLapse')) {
+      const K = solarLapseDaysPerSec() * 86400;
+      solarLapseMs += Math.min(dtReal, 250) * Clock.speed * (K - 1);
     }
   }
   if (Clock.speed !== 0) solarMotionSign = Math.sign(Clock.speed);
@@ -2360,7 +2946,9 @@ function drawSolarClockBackdrop(g, w, h) {
   g.fillText(now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), w / 2, h * 0.73);
   if (Settings.get('solarLapse')) {
     const sim = new Date(solarEffectiveMs());
-    const simStr = `SIM ${sim.getFullYear()}-${String(sim.getMonth() + 1).padStart(2, '0')}-${String(sim.getDate()).padStart(2, '0')}`;
+    const rate = SOLAR_LAPSE_RATES.find(r => r.value === solarLapseDaysPerSec());
+    const rateStr = rate ? ` · ${rate.label}` : '';
+    const simStr = `SIM ${sim.getFullYear()}-${String(sim.getMonth() + 1).padStart(2, '0')}-${String(sim.getDate()).padStart(2, '0')}${rateStr}`;
     g.font = `${Math.round(h * 0.032)}px Consolas, 'Courier New', monospace`;
     g.fillStyle = 'rgba(245,158,11,0.10)';
     g.fillText(simStr, w / 2, h * 0.73 + h * 0.055);
@@ -2400,7 +2988,7 @@ function drawSolarBelt(g, cx, cy, cam, maxR, effDays) {
     const alpha = 0.24 + rand() * 0.35;
     const p = projectCore(cx, cy, cam, rr, solarScreenAngle(baseAng + rot));
     g.fillStyle = `rgba(154,140,118,${alpha.toFixed(3)})`;
-    g.beginPath(); g.arc(p.x, p.y, 0.9 * solarDpr * cam.zoom, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(p.x, p.y, 0.9 * solarDpr * cam.zoom * solarSizeK, 0, Math.PI * 2); g.fill();
   }
 }
 
@@ -2435,7 +3023,7 @@ function drawSolarMoonOrbits(g, cam, planetPos, p) {
   for (const m of p.moons) {
     g.beginPath();
     for (let i = 0; i <= seg; i++) {
-      const pt = projectCore(planetPos.x, planetPos.y, cam, m.dist * solarDpr, (i / seg) * Math.PI * 2);
+      const pt = projectCore(planetPos.x, planetPos.y, cam, m.dist * solarDpr * solarSizeK, (i / seg) * Math.PI * 2);
       if (i === 0) g.moveTo(pt.x, pt.y); else g.lineTo(pt.x, pt.y);
     }
     g.stroke();
@@ -2445,9 +3033,9 @@ function drawSolarMoonOrbits(g, cam, planetPos, p) {
 function drawSolarMoonBodies(g, cam, planetPos, planetDepth, p, effMs, lapseOn, sunX, sunY, back) {
   for (const m of p.moons) {
     const ang = solarScreenAngle(solarMoonAngle(m, effMs, lapseOn));
-    const mp = projectCore(planetPos.x, planetPos.y, cam, m.dist * solarDpr, ang);
+    const mp = projectCore(planetPos.x, planetPos.y, cam, m.dist * solarDpr * solarSizeK, ang);
     if (back ? mp.depth >= 0 : mp.depth < 0) continue;
-    const ms = m.size * solarDpr * cam.zoom;
+    const ms = m.size * solarDpr * cam.zoom * solarSizeK;
     g.fillStyle = m.color;
     g.beginPath(); g.arc(mp.x, mp.y, ms, 0, Math.PI * 2); g.fill();
     const ldx = sunX - mp.x, ldy = sunY - mp.y;
@@ -2465,7 +3053,7 @@ function drawSolarComet(g, cx, cy, cam, maxR, effMs) {
   const len = Math.hypot(dx, dy);
   if (len < 1e-3) return;
   const ux = dx / len, uy = dy / len;
-  const scale = solarDpr * cam.zoom;
+  const scale = solarDpr * cam.zoom * solarSizeK;
 
   const near = Math.max(0, Math.min(1, ((1 + SOLAR_COMET.E) - rFrac) / (2 * SOLAR_COMET.E)));
   const tailLen = (24 + 78 * near) * scale;
@@ -2524,7 +3112,7 @@ function drawSolarBodies(g, cx, cy, cam, maxR, nowPerf) {
     const theta = solarPlanetAngle(p, effMs);
     const orbitPx = solarOrbitFrac(p.a) * maxR;
     const pos = projectCore(cx, cy, cam, orbitPx, solarScreenAngle(theta));
-    const s = p.size * solarDpr * cam.zoom;
+    const s = p.size * solarDpr * cam.zoom * solarSizeK;
     return { p, theta, orbitPx, pos, s, depth: pos.depth };
   });
   const order = items.map((_, i) => i);
@@ -2654,7 +3242,14 @@ function drawSolar(now) {
 
   const cam = SolarCam;
   const cx = w / 2 + cam.panX, cy = h / 2 + cam.panY;
-  const maxR = Math.min(w, h) * 0.44;
+  // Size from BOTH axes: the tilt squashes the system vertically (outer ring
+  // height = 2·maxR·0.55), so width can carry far more than min(w,h) — on a
+  // 16:9 window this nearly doubles the system vs the old min(w,h)·0.44.
+  const maxR = Math.min(w * 0.46, h * 0.78);
+  solarMaxRLast = maxR;
+  // Bodies keep the demo's px sizes at small maxR but grow with the system
+  // so they don't look lost on the larger rings.
+  solarSizeK = Math.min(2.2, Math.max(1, maxR / (280 * solarDpr)));
   const effMs = solarEffectiveMs();
   solarBodyCache = [];
 
