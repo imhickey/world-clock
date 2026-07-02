@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>World Clock</title>
-<meta name="description" content="Beautiful responsive world clock with Flip, Analog, Globe, Map and Horizon views across 6 timezones.">
+<meta name="description" content="Beautiful responsive world clock with Flip, Analog, Globe, Map, Horizon, Orbit and Solar System views across 6 timezones.">
 <meta property="og:title" content="World Clock">
-<meta property="og:description" content="Beautiful responsive world clock with 5 visualizations across 6 timezones.">
+<meta property="og:description" content="Beautiful responsive world clock with 7 visualizations across 6 timezones, including a real-time solar system.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://imhickey.github.io/world-clock/">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
@@ -35,7 +35,44 @@ h1 {
   letter-spacing: 0.3em;
   text-transform: uppercase;
   color: #64748b;
-  margin-bottom: clamp(0.8rem, 1.5vh, 2rem);
+  margin-bottom: clamp(0.4rem, 1vh, 1rem);
+}
+
+/* ── Time Travel HUD ── */
+#time-hud {
+  display: none;
+  align-items: center; gap: 6px;
+  font-size: 0.7rem; letter-spacing: 0.05em;
+  color: #94a3b8; cursor: pointer;
+  margin: 0 0 0.5rem;
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: rgba(15,23,42,0.5);
+  border: 1px solid transparent;
+  transition: border-color 0.2s;
+  font-family: 'Consolas','Courier New',monospace;
+  user-select: none;
+}
+#time-hud.show { display: inline-flex; }
+#time-hud:hover { border-color: #334155; }
+.time-hud-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  background: #22c55e; box-shadow: 0 0 6px #22c55e80;
+}
+.time-hud-dot.scrubbed { background: #f59e0b; box-shadow: 0 0 6px #f59e0b80; }
+#time-scrubber {
+  display: none;
+  width: min(360px, 70vw);
+  margin: 0 0 clamp(0.8rem, 1.5vh, 2rem);
+  accent-color: #f59e0b;
+  cursor: pointer;
+}
+#time-scrubber.show { display: block; }
+
+/* ── Ambient Background Canvas ── */
+#bg-canvas {
+  position: fixed; inset: 0; z-index: -1;
+  display: block; width: 100%; height: 100%; pointer-events: none;
 }
 
 /* ── View Switcher ── */
@@ -211,6 +248,15 @@ body.no-seconds .analog-second { display: none; }
   font-variant-numeric: tabular-nums;
   margin-top: -0.2rem;
 }
+#analog-grid { position: relative; }
+/* Smooth sweep + comet-tail canvas, shared by all clocks in the grid.
+   Removed from DOM, not just hidden, when trails is off. The SVG second
+   hand is hidden via body class while this is active, to avoid a double hand. */
+#analog-trails-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none;
+}
+body.analog-trails-on .analog-second { display: none; }
 
 /* ═══════════════════════════════════════
    VIEW 3: GLOBE
@@ -240,11 +286,17 @@ body.no-seconds .analog-second { display: none; }
   border: 2px solid rgba(100,180,255,0.12);
   pointer-events: none;
 }
-/* Day/night terminator overlay */
+/* Day/night terminator overlay (legacy CSS path — used when globeShading is off) */
 #globe-terminator {
   position: absolute; top: 0; right: 0; bottom: 0; left: 0; border-radius: 50%;
   pointer-events: none; z-index: 2;
   transition: background 2s linear;
+}
+/* Real terminator + atmosphere shading canvas (removed from DOM, not just
+   hidden, when globeShading is off — see makeCanvasPresence in the script) */
+#globe-shade-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%;
+  pointer-events: none; z-index: 3;
 }
 @keyframes globeSpin {
   from { background-position: 0 center; }
@@ -361,6 +413,12 @@ body.no-seconds .analog-second { display: none; }
   );
   box-shadow: 0 0 30px rgba(125,211,252,0.1);
 }
+/* Traveling sun/moon glow — sits above the bar, below labels & markers.
+   Removed from DOM, not just hidden, when horizonGlow is off. */
+#horizon-glow-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none;
+}
 .horizon-hour-labels {
   position: absolute; top: 155px;
   width: 100%; display: flex; justify-content: space-between;
@@ -391,6 +449,35 @@ body.no-seconds .analog-second { display: none; }
   font-variant-numeric: tabular-nums;
 }
 .horizon-marker .tag .location-label { font-size: 0.6rem; }
+
+/* ═══════════════════════════════════════
+   VIEW 6: ORBIT
+   ═══════════════════════════════════════ */
+.orbit-container {
+  position: relative;
+  width: 95vw;
+  height: calc(100vh - 160px);
+  max-height: 800px;
+  min-height: 320px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+#orbit-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  display: block;
+}
+
+/* ═══════════════════════════════════════
+   VIEW 7: SOLAR SYSTEM
+   ═══════════════════════════════════════ */
+/* Shares .orbit-container for the frame; canvas gets its own id + cursor rules */
+#solar-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  display: block;
+  touch-action: none; /* pointer-event drag pan owns gestures on the canvas */
+}
+#solar-canvas.dragging { cursor: move; }
+#solar-canvas.hovering { cursor: pointer; }
 
 /* ── Responsive ── */
 
@@ -467,11 +554,101 @@ body.no-seconds .analog-second { display: none; }
 .credits a { color: #64748b; text-decoration: none; pointer-events: auto; }
 .credits a:hover { color: #94a3b8; }
 .switcher-sep { width: 1px; background: #334155; margin: 4px; }
+
+/* ── Settings Panel ── */
+#settings-backdrop {
+  position: fixed; inset: 0; display: none; z-index: 200;
+  background: rgba(0,0,0,0.55);
+  align-items: center; justify-content: center;
+}
+#settings-backdrop.open { display: flex; }
+#settings-panel {
+  width: 420px; max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  background: #16213e; color: #e0e0e0;
+  border: 1px solid #334155; border-radius: 10px;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  font-size: 13px;
+}
+.settings-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 0.85rem; letter-spacing: 0.1em; text-transform: uppercase; color: #94a3b8;
+}
+#settings-close {
+  background: transparent; border: none; color: #94a3b8;
+  font-size: 1.2rem; line-height: 1; cursor: pointer; padding: 2px 6px;
+}
+#settings-close:hover { color: #e2e8f0; }
+.settings-body { padding: 8px 18px 14px; overflow-y: auto; }
+.settings-group-title {
+  font-size: 0.68rem; letter-spacing: 0.15em; text-transform: uppercase;
+  color: #64748b; margin: 14px 0 8px;
+}
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+  gap: 12px;
+}
+.settings-row label { color: #cbd5e1; font-size: 0.82rem; }
+.settings-row select {
+  background: #0f172a; color: #e2e8f0; border: 1px solid #334155;
+  border-radius: 6px; padding: 4px 8px; font-size: 0.78rem; font-family: inherit;
+}
+.settings-toggle-switch {
+  position: relative; width: 38px; height: 22px; flex-shrink: 0;
+  background: #334155; border-radius: 20px; border: none; cursor: pointer;
+  transition: background 0.2s;
+}
+.settings-toggle-switch::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 18px; height: 18px; border-radius: 50%; background: #cbd5e1;
+  transition: transform 0.2s;
+}
+.settings-toggle-switch.on { background: #f59e0b; }
+.settings-toggle-switch.on::after { transform: translateX(16px); background: #1a1a2e; }
+.settings-footer {
+  padding: 12px 18px; text-align: right; border-top: 1px solid rgba(255,255,255,0.06);
+}
+#settings-reset {
+  background: #1B2740; color: #cbd5e1; border: 1px solid #334155;
+  border-radius: 6px; padding: 7px 16px; cursor: pointer; font-size: 0.78rem;
+}
+#settings-reset:hover { border-color: #f59e0b; color: #fff; }
+
+/* ── FPS counter ── */
+#fps-counter {
+  position: fixed; top: 10px; right: 12px; z-index: 100;
+  font-family: 'Consolas','Courier New',monospace; font-size: 0.75rem;
+  color: rgba(245,158,11,0.85); letter-spacing: 0.05em;
+  pointer-events: none; display: none;
+}
+#fps-counter.show { display: block; }
+
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 96px; left: 50%; transform: translateX(-50%);
+  font-size: 0.8rem; color: #fde68a; background: rgba(15,23,42,0.92);
+  border: 1px solid rgba(245,158,11,0.3); border-radius: 8px;
+  padding: 8px 16px; z-index: 150; pointer-events: none;
+  opacity: 0; transition: opacity 0.3s;
+  white-space: nowrap;
+}
+#toast.show { opacity: 1; }
 </style>
 </head>
 <body>
 
+<canvas id="bg-canvas"></canvas>
+
 <h1 id="title">World Clock</h1>
+
+<div id="time-hud" title="Click to return to LIVE">
+  <span id="time-hud-dot" class="time-hud-dot"></span>
+  <span id="time-hud-text">LIVE</span>
+</div>
+<input type="range" id="time-scrubber" min="-1440" max="1440" value="0" step="1" aria-label="Scrub time (±24 hours)">
 
 <!-- View 1: Flip Clock -->
 <div id="view-flip" class="view active">
@@ -480,13 +657,15 @@ body.no-seconds .analog-second { display: none; }
 
 <!-- View 2: Analog Wall -->
 <div id="view-analog" class="view">
-  <div class="clock-grid" id="analog-grid"></div>
+  <div class="clock-grid" id="analog-grid">
+    <canvas id="analog-trails-canvas"></canvas>
+  </div>
 </div>
 
 <!-- View 3: Globe -->
 <div id="view-globe" class="view">
   <div class="globe-wrap">
-    <div class="globe-sphere"><div id="globe-terminator"></div></div>
+    <div class="globe-sphere"><div id="globe-terminator"></div><canvas id="globe-shade-canvas"></canvas></div>
     <div class="globe-clocks" id="globe-grid"></div>
   </div>
 </div>
@@ -501,8 +680,23 @@ body.no-seconds .analog-second { display: none; }
   <div class="horizon-wrap">
     <div class="horizon-bar-area" id="horizon-area">
       <div class="horizon-bar"></div>
+      <canvas id="horizon-glow-canvas"></canvas>
       <div class="horizon-hour-labels" id="horizon-hours"></div>
     </div>
+  </div>
+</div>
+
+<!-- View 6: Orbit -->
+<div id="view-orbit" class="view">
+  <div class="orbit-container" id="orbit-container">
+    <canvas id="orbit-canvas"></canvas>
+  </div>
+</div>
+
+<!-- View 7: Solar System -->
+<div id="view-solar" class="view">
+  <div class="orbit-container" id="solar-container">
+    <canvas id="solar-canvas"></canvas>
   </div>
 </div>
 
@@ -518,11 +712,863 @@ body.no-seconds .analog-second { display: none; }
   <button data-view="globe">🌍 Globe</button>
   <button data-view="map">🗺️ Map</button>
   <button data-view="horizon">📊 Horizon</button>
+  <button data-view="orbit">🪐 Orbit</button>
+  <button data-view="solar">☀️ Solar</button>
   <span class="switcher-sep"></span>
   <button id="sec-toggle">⏱️ Seconds</button>
+  <span class="switcher-sep"></span>
+  <button id="settings-toggle" title="Settings">⚙️</button>
+</div>
+
+<!-- FPS Counter -->
+<div id="fps-counter"></div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Settings Panel -->
+<div id="settings-backdrop">
+  <div id="settings-panel" role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="settings-header">
+      <span>Settings</span>
+      <button id="settings-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="settings-body" id="settings-body"></div>
+    <div class="settings-footer">
+      <button id="settings-reset">Reset to defaults</button>
+    </div>
+  </div>
 </div>
 
 <script>
+// ═══════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════
+const SETTINGS_KEY = 'worldclock-settings-v1';
+const DEFAULTS = {
+  starfield: true,
+  twinkle: true,
+  comet: true,
+  globeShading: true,
+  atmosphere: true,
+  horizonGlow: true,
+  trails: true,
+  orbitRings: true,
+  orbitLabels: true,
+  solarLapse: true,
+  solarClock: true,
+  solarMoons: true,
+  solarBelt: true,
+  solarOrbits: true,
+  solarLabels: false,
+  tooltips: true, // generic key — Phase 7's DOM tooltips will reuse it
+  timeControls: true,
+  fps: false,
+  reduceMotion: null, // null = follow OS prefers-reduced-motion; true/false = force
+};
+const AMBIENCE_KEYS = Object.keys(DEFAULTS).filter(k => k !== 'fps' && k !== 'reduceMotion');
+
+const Settings = (() => {
+  let state = { ...DEFAULTS };
+
+  function applyUrlOverrides() {
+    const fx = new URLSearchParams(location.search).get('fx');
+    if (fx === 'off') AMBIENCE_KEYS.forEach(k => { state[k] = false; });
+    else if (fx === 'all') AMBIENCE_KEYS.forEach(k => { state[k] = true; });
+  }
+
+  function load() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+      state = { ...DEFAULTS, ...stored };
+    } catch { state = { ...DEFAULTS }; }
+    applyUrlOverrides();
+  }
+
+  function save() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(state)); }
+  function get(key) { return state[key]; }
+  function set(key, value) { state[key] = value; save(); }
+  function reset() { state = { ...DEFAULTS }; save(); }
+
+  load();
+  return { get, set, reset };
+})();
+
+function effectiveReduceMotion() {
+  const forced = Settings.get('reduceMotion');
+  if (forced === true || forced === false) return forced;
+  return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+// ═══════════════════════════════════════
+// CLOCK (time-travel seam)
+// ═══════════════════════════════════════
+const Clock = {
+  offsetMs: 0,
+  speed: 1,
+  _lastRealMs: null,
+  live() { return this.offsetMs === 0 && this.speed === 1; },
+  now() { return new Date(Date.now() + this.offsetMs); },
+  reset() { this.offsetMs = 0; this.speed = 1; },
+  // Accumulates offsetMs from elapsed real time so speed !=1 continuously
+  // diverges sim-time from real-time (rather than a one-time jump). At
+  // speed=1, offsetMs alone already advances at the real rate, so this is a
+  // no-op — call it every frame while !live() for smooth fast-forward/pause/
+  // reverse; harmless (and unnecessary) to call while live.
+  pump() {
+    const nowReal = Date.now();
+    if (this._lastRealMs === null) { this._lastRealMs = nowReal; return; }
+    const dtReal = nowReal - this._lastRealMs;
+    this._lastRealMs = nowReal;
+    if (this.speed !== 1) this.offsetMs += dtReal * (this.speed - 1);
+  },
+};
+
+// ═══════════════════════════════════════
+// RENDER MANAGER — one rAF loop, only runs while a consumer needs it
+// ═══════════════════════════════════════
+const Renderer = (() => {
+  const consumers = new Map();
+  let running = false;
+  let frames = 0, fpsWindowStart = performance.now(), fps = 0;
+
+  function isActive(c) { return !c.when || c.when(); }
+  function hasActiveConsumers() {
+    for (const c of consumers.values()) if (isActive(c)) return true;
+    return false;
+  }
+
+  function loop(now) {
+    if (document.hidden || !hasActiveConsumers()) { running = false; return; }
+    for (const c of consumers.values()) if (isActive(c)) c.draw(now);
+    frames++;
+    if (now - fpsWindowStart >= 500) {
+      fps = frames / ((now - fpsWindowStart) / 1000);
+      frames = 0; fpsWindowStart = now;
+      updateFpsDisplay();
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function ensureLoop() {
+    if (!running && !document.hidden && hasActiveConsumers()) {
+      running = true;
+      requestAnimationFrame(loop);
+    }
+  }
+
+  function register(name, config) { consumers.set(name, config); ensureLoop(); }
+  function unregister(name) { consumers.delete(name); }
+  function getFps() { return fps; }
+
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureLoop(); });
+
+  return { register, unregister, ensureLoop, getFps };
+})();
+
+function sizeCanvas(canvas) {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
+  if (canvas.width !== pw || canvas.height !== ph) { canvas.width = pw; canvas.height = ph; }
+  return dpr;
+}
+
+// Returns a setPresent(bool) closure that inserts/removes a canvas from the
+// DOM entirely (not just display:none) when its feature flag is off, per the
+// "only the active ones sized/drawn" performance rule.
+function makeCanvasPresence(canvas) {
+  const parent = canvas.parentNode;
+  const nextSibling = canvas.nextSibling;
+  return (present) => {
+    if (present && !canvas.isConnected) parent.insertBefore(canvas, nextSibling);
+    else if (!present && canvas.isConnected) canvas.remove();
+  };
+}
+
+// ═══════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════
+let toastTimer = null;
+function showToast(text) {
+  const el = document.getElementById('toast');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ═══════════════════════════════════════
+// FPS COUNTER
+// ═══════════════════════════════════════
+const fpsEl = document.getElementById('fps-counter');
+function updateFpsDisplay() {
+  fpsEl.textContent = `${Math.round(Renderer.getFps())} fps`;
+}
+function applyFpsState() {
+  const on = Settings.get('fps');
+  fpsEl.classList.toggle('show', on);
+  if (on) Renderer.register('fps-heartbeat', { draw: () => {} });
+  else Renderer.unregister('fps-heartbeat');
+}
+applyFpsState();
+
+// ═══════════════════════════════════════
+// STARFIELD + HOURLY COMET (ambient background canvas)
+// ═══════════════════════════════════════
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hashStringToSeed(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  return h;
+}
+
+// ═══════════════════════════════════════
+// SHARED CANVAS HELPERS
+// ═══════════════════════════════════════
+// Smooth comet-tail trail: pts ordered oldest→newest, in DEVICE pixels.
+// Stroked segment-by-segment with quadratic alpha falloff toward the tail
+// and linear width taper, round caps. Callers resample pts analytically from
+// their angle function every frame (never a stored screen-position history —
+// that breaks under time reverse/scrub, pan/zoom, and pause). Normal
+// compositing on purpose: round caps double-stamp at segment joints, and
+// modest alpha keeps that invisible where 'lighter' would bloom.
+function drawTaperedTrail(g, pts, hexColor, headWidth, maxAlpha = 0.5) {
+  if (pts.length < 2) return;
+  g.lineCap = 'round';
+  for (let i = 1; i < pts.length; i++) {
+    const f = i / (pts.length - 1); // 0 at tail -> 1 at head
+    g.strokeStyle = hexToRgba(hexColor, maxAlpha * f * f);
+    g.lineWidth = Math.max(0.4, headWidth * f);
+    g.beginPath();
+    g.moveTo(pts[i - 1].x, pts[i - 1].y);
+    g.lineTo(pts[i].x, pts[i].y);
+    g.stroke();
+  }
+}
+
+const bgCanvas = document.getElementById('bg-canvas');
+const bgCtx = bgCanvas.getContext('2d');
+const setBgCanvasPresent = makeCanvasPresence(bgCanvas);
+let stars = [];
+let bgDpr = 1;
+let cometState = null;
+
+function buildStars() {
+  const rand = mulberry32(7);
+  const area = window.innerWidth * window.innerHeight;
+  const count = Math.min(250, Math.round(area / 4500));
+  stars = [];
+  for (let i = 0; i < count; i++) {
+    stars.push({
+      x: rand(), y: rand(),
+      r: rand() * 1.1 + 0.3,
+      baseAlpha: rand() * 0.5 + 0.25,
+      phase: rand() * Math.PI * 2,
+      speed: rand() * 0.6 + 0.3,
+    });
+  }
+}
+
+// Checked once per second from tick() — cheap enough to run continuously,
+// and avoids driving the rAF loop just to watch the clock.
+function checkCometTrigger() {
+  if (!Settings.get('comet') || effectiveReduceMotion()) return;
+  const d = Clock.now();
+  if (d.getMinutes() !== 0 || d.getSeconds() > 4) return;
+  const hourKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}`;
+  if (cometState && cometState.hourKey === hourKey) return;
+  cometState = { hourKey, startTime: performance.now(), duration: 4000, seed: hashStringToSeed(hourKey) };
+  Renderer.ensureLoop();
+}
+
+function drawComet(now) {
+  if (!cometState) return;
+  const elapsed = now - cometState.startTime;
+  if (elapsed < 0 || elapsed > cometState.duration) { cometState = null; return; }
+  const p = elapsed / cometState.duration;
+  const rand = mulberry32(cometState.seed);
+  const startX = rand() * 0.6 + 0.1;
+  const startY = rand() * 0.3 + 0.05;
+  const angle = (rand() * 30 + 20) * Math.PI / 180;
+  const w = bgCanvas.width, h = bgCanvas.height;
+  const x = (startX + Math.cos(angle) * p) * w;
+  const y = (startY + Math.sin(angle) * p) * h;
+  const tailLen = Math.min(w, h) * 0.12;
+  const dx = -Math.cos(angle), dy = -Math.sin(angle);
+  const alpha = Math.min(1, p / 0.08, (1 - p) / 0.15);
+  if (alpha <= 0) return;
+
+  bgCtx.save();
+  bgCtx.globalCompositeOperation = 'lighter';
+  const grad = bgCtx.createLinearGradient(x, y, x + dx * tailLen, y + dy * tailLen);
+  grad.addColorStop(0,   `rgba(207,236,255,${(0.9 * alpha).toFixed(3)})`);
+  grad.addColorStop(0.5, `rgba(124,192,255,${(0.35 * alpha).toFixed(3)})`);
+  grad.addColorStop(1,   'rgba(124,192,255,0)');
+  bgCtx.strokeStyle = grad;
+  bgCtx.lineWidth = 1.6 * bgDpr;
+  bgCtx.beginPath();
+  bgCtx.moveTo(x, y);
+  bgCtx.lineTo(x + dx * tailLen, y + dy * tailLen);
+  bgCtx.stroke();
+
+  bgCtx.fillStyle = `rgba(234,246,255,${alpha.toFixed(3)})`;
+  bgCtx.beginPath();
+  bgCtx.arc(x, y, 1.8 * bgDpr, 0, Math.PI * 2);
+  bgCtx.fill();
+  bgCtx.restore();
+}
+
+function drawBackground(now) {
+  const w = bgCanvas.width, h = bgCanvas.height;
+  bgCtx.clearRect(0, 0, w, h);
+  if (!Settings.get('starfield')) return;
+
+  const twinkleOn = Settings.get('twinkle') && !effectiveReduceMotion();
+  const t = now / 1000;
+  stars.forEach(s => {
+    const alpha = twinkleOn
+      ? s.baseAlpha * (0.6 + 0.4 * Math.sin(t * s.speed + s.phase))
+      : s.baseAlpha;
+    bgCtx.fillStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
+    bgCtx.beginPath();
+    bgCtx.arc(s.x * w, s.y * h, s.r * bgDpr, 0, Math.PI * 2);
+    bgCtx.fill();
+  });
+
+  drawComet(now);
+}
+
+function bgActive() {
+  if (!Settings.get('starfield') || effectiveReduceMotion()) return false;
+  if (Settings.get('twinkle')) return true;
+  if (cometState) {
+    const elapsed = performance.now() - cometState.startTime;
+    return elapsed >= 0 && elapsed <= cometState.duration;
+  }
+  return false;
+}
+
+function refreshBackground() {
+  const on = Settings.get('starfield');
+  setBgCanvasPresent(on);
+  if (on) {
+    bgDpr = sizeCanvas(bgCanvas);
+    buildStars();
+    drawBackground(performance.now());
+  }
+  Renderer.ensureLoop();
+}
+
+Renderer.register('background', { when: bgActive, draw: drawBackground });
+window.addEventListener('resize', refreshBackground);
+if (window.matchMedia) {
+  window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', refreshBackground);
+}
+refreshBackground();
+
+// ═══════════════════════════════════════
+// GLOBE SHADING (real terminator + atmosphere on the Globe view)
+// ═══════════════════════════════════════
+const globeTerminatorEl = document.getElementById('globe-terminator');
+const globeCanvas = document.getElementById('globe-shade-canvas');
+const globeCtx = globeCanvas.getContext('2d');
+const setGlobeCanvasPresent = makeCanvasPresence(globeCanvas);
+let globeDpr = 1;
+
+function isGlobeViewActive() {
+  const el = document.getElementById('view-globe');
+  return !!el && el.classList.contains('active');
+}
+
+// Sun direction as a unit vector in the plane of the globe circle.
+// sunAngleDeg is the existing longitude-based rotation (matches the legacy
+// CSS terminator's angle exactly); decl is the seasonal axial-tilt offset,
+// which rotates the whole terminator band a few degrees through the year.
+function sunDirection() {
+  const now = Clock.now();
+  const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+  const sunAngleDeg = ((utcH / 24) * 360 + 180) % 360;
+  const yearStart = Date.UTC(now.getUTCFullYear(), 0, 0);
+  const dayOfYear = Math.floor((now.getTime() - yearStart) / 86400000);
+  const decl = 23.44 * Math.sin(2 * Math.PI * (dayOfYear - 81) / 365);
+  const theta = (sunAngleDeg + decl) * Math.PI / 180;
+  return { dx: Math.sin(theta), dy: -Math.cos(theta), sunAngleDeg, decl };
+}
+
+function drawGlobeShade(now) {
+  globeDpr = sizeCanvas(globeCanvas);
+  const w = globeCanvas.width, h = globeCanvas.height;
+  globeCtx.clearRect(0, 0, w, h);
+  if (!Settings.get('globeShading') || w === 0 || h === 0) return;
+
+  const cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2;
+  const { dx, dy } = sunDirection();
+
+  // Terminator: dark night side -> transparent -> warm day side (same
+  // color stops as the legacy CSS gradient, now vector-driven so the
+  // seasonal tilt actually rotates it).
+  const darkX = cx - dx * r, darkY = cy - dy * r;
+  const litX = cx + dx * r, litY = cy + dy * r;
+  const grad = globeCtx.createLinearGradient(darkX, darkY, litX, litY);
+  grad.addColorStop(0.00, 'rgba(0,5,25,0.80)');
+  grad.addColorStop(0.18, 'rgba(0,8,35,0.55)');
+  grad.addColorStop(0.36, 'rgba(0,10,50,0.20)');
+  grad.addColorStop(0.46, 'rgba(0,10,50,0)');
+  grad.addColorStop(0.54, 'rgba(255,220,120,0)');
+  grad.addColorStop(0.64, 'rgba(255,220,120,0.07)');
+  grad.addColorStop(0.80, 'rgba(255,200,90,0.12)');
+  grad.addColorStop(1.00, 'rgba(255,180,60,0.16)');
+  globeCtx.fillStyle = grad;
+  globeCtx.beginPath(); globeCtx.arc(cx, cy, r, 0, Math.PI * 2); globeCtx.fill();
+
+  // Sub-solar highlight — brightest point nearest the sun
+  const hiX = cx + dx * r * 0.45, hiY = cy + dy * r * 0.45;
+  const hiGrad = globeCtx.createRadialGradient(hiX, hiY, 0, hiX, hiY, r * 0.9);
+  hiGrad.addColorStop(0, 'rgba(255,235,180,0.16)');
+  hiGrad.addColorStop(1, 'rgba(255,235,180,0)');
+  globeCtx.fillStyle = hiGrad;
+  globeCtx.beginPath(); globeCtx.arc(cx, cy, r, 0, Math.PI * 2); globeCtx.fill();
+
+  // Atmosphere: soft inner rim glow, gently flickering. .globe-sphere clips
+  // overflow, so this stays inside the circle rather than haloing outside it.
+  if (Settings.get('atmosphere')) {
+    const t = now / 1000;
+    const flick = effectiveReduceMotion() ? 1 : 1 + 0.04 * Math.sin(t * 2.3);
+    globeCtx.save();
+    globeCtx.globalCompositeOperation = 'lighter';
+    const aGrad = globeCtx.createRadialGradient(cx, cy, r * 0.80 * flick, cx, cy, r);
+    aGrad.addColorStop(0, 'rgba(100,180,255,0)');
+    aGrad.addColorStop(1, 'rgba(100,180,255,0.14)');
+    globeCtx.fillStyle = aGrad;
+    globeCtx.beginPath(); globeCtx.arc(cx, cy, r, 0, Math.PI * 2); globeCtx.fill();
+    globeCtx.restore();
+  }
+}
+
+function applyGlobeShadingVisibility() {
+  const on = Settings.get('globeShading');
+  globeTerminatorEl.style.display = on ? 'none' : '';
+  setGlobeCanvasPresent(on);
+  if (!on) globeTerminatorEl.style.background = ''; // let the legacy path in updateGlobe() repaint it
+}
+
+function refreshGlobeShading() {
+  applyGlobeShadingVisibility();
+  if (Settings.get('globeShading')) drawGlobeShade(performance.now());
+  Renderer.ensureLoop();
+}
+
+function globeAnimActive() {
+  return isGlobeViewActive() && Settings.get('globeShading') && Settings.get('atmosphere') && !effectiveReduceMotion();
+}
+
+Renderer.register('globe-shade', { when: globeAnimActive, draw: drawGlobeShade });
+window.addEventListener('resize', () => { if (isGlobeViewActive()) drawGlobeShade(performance.now()); });
+applyGlobeShadingVisibility();
+
+// ═══════════════════════════════════════
+// HORIZON SUN & MOON (traveling glow on the Horizon strip)
+// ═══════════════════════════════════════
+const horizonGlowCanvas = document.getElementById('horizon-glow-canvas');
+const horizonGlowCtx = horizonGlowCanvas.getContext('2d');
+const setHorizonCanvasPresent = makeCanvasPresence(horizonGlowCanvas);
+let horizonGlowDpr = 1;
+
+function isHorizonViewActive() {
+  const el = document.getElementById('view-horizon');
+  return !!el && el.classList.contains('active');
+}
+
+function drawHorizonGlow(now) {
+  horizonGlowDpr = sizeCanvas(horizonGlowCanvas);
+  const w = horizonGlowCanvas.width, h = horizonGlowCanvas.height;
+  horizonGlowCtx.clearRect(0, 0, w, h);
+  if (!Settings.get('horizonGlow') || w === 0 || h === 0) return;
+
+  // Geometry matches the CSS bar (top:80px, height:70px within a 220px-tall area)
+  const barTopFrac = 80 / 220, barHeightFrac = 70 / 220;
+  const barTopY = h * barTopFrac, barHeightPx = h * barHeightFrac;
+  const barCenterY = barTopY + barHeightPx / 2;
+  const sunX = w * 0.5; // solar noon — matches the bar gradient's brightest point
+
+  const t = now / 1000;
+  const flick = effectiveReduceMotion() ? 1 : 1 + 0.04 * Math.sin(t * 2.1);
+
+  // Subtle warm brighten of the bar itself, right under the sun
+  horizonGlowCtx.save();
+  horizonGlowCtx.globalCompositeOperation = 'lighter';
+  const barGlow = horizonGlowCtx.createRadialGradient(sunX, barCenterY, 0, sunX, barCenterY, w * 0.16 * flick);
+  barGlow.addColorStop(0, 'rgba(255,235,180,0.30)');
+  barGlow.addColorStop(1, 'rgba(255,235,180,0)');
+  horizonGlowCtx.fillStyle = barGlow;
+  horizonGlowCtx.fillRect(0, barTopY, w, barHeightPx);
+  horizonGlowCtx.restore();
+
+  // Sun: corona (drawSun-style radial gradient + lighter + flicker) + solid disc
+  const sunR = Math.min(w, h) * 0.032;
+  horizonGlowCtx.save();
+  horizonGlowCtx.globalCompositeOperation = 'lighter';
+  const coronaR = sunR * 3.4 * flick;
+  const corona = horizonGlowCtx.createRadialGradient(sunX, barCenterY, 0, sunX, barCenterY, coronaR);
+  corona.addColorStop(0,   'rgba(255,220,130,0.55)');
+  corona.addColorStop(0.5, 'rgba(255,170,60,0.18)');
+  corona.addColorStop(1,   'rgba(255,120,30,0)');
+  horizonGlowCtx.fillStyle = corona;
+  horizonGlowCtx.beginPath(); horizonGlowCtx.arc(sunX, barCenterY, coronaR, 0, Math.PI * 2); horizonGlowCtx.fill();
+  horizonGlowCtx.restore();
+  horizonGlowCtx.fillStyle = 'rgba(255,244,214,0.95)';
+  horizonGlowCtx.beginPath(); horizonGlowCtx.arc(sunX, barCenterY, sunR, 0, Math.PI * 2); horizonGlowCtx.fill();
+
+  // Moon: soft glow at both midnight ends of the strip (0% and 100% are the same instant)
+  const moonR = sunR * 0.7;
+  [w * 0.02, w * 0.98].forEach(moonX => {
+    horizonGlowCtx.save();
+    horizonGlowCtx.globalCompositeOperation = 'lighter';
+    const moonGlowR = moonR * 2.6;
+    const moonGlow = horizonGlowCtx.createRadialGradient(moonX, barCenterY, 0, moonX, barCenterY, moonGlowR);
+    moonGlow.addColorStop(0, 'rgba(190,205,255,0.28)');
+    moonGlow.addColorStop(1, 'rgba(150,175,255,0)');
+    horizonGlowCtx.fillStyle = moonGlow;
+    horizonGlowCtx.beginPath(); horizonGlowCtx.arc(moonX, barCenterY, moonGlowR, 0, Math.PI * 2); horizonGlowCtx.fill();
+    horizonGlowCtx.restore();
+    horizonGlowCtx.fillStyle = 'rgba(225,232,255,0.85)';
+    horizonGlowCtx.beginPath(); horizonGlowCtx.arc(moonX, barCenterY, moonR, 0, Math.PI * 2); horizonGlowCtx.fill();
+  });
+}
+
+function applyHorizonGlowVisibility() {
+  setHorizonCanvasPresent(Settings.get('horizonGlow'));
+}
+
+function refreshHorizonGlow() {
+  applyHorizonGlowVisibility();
+  if (Settings.get('horizonGlow')) drawHorizonGlow(performance.now());
+  Renderer.ensureLoop();
+}
+
+function horizonAnimActive() {
+  return isHorizonViewActive() && Settings.get('horizonGlow') && !effectiveReduceMotion();
+}
+
+Renderer.register('horizon-glow', { when: horizonAnimActive, draw: drawHorizonGlow });
+window.addEventListener('resize', () => { if (isHorizonViewActive()) drawHorizonGlow(performance.now()); });
+applyHorizonGlowVisibility();
+
+// ═══════════════════════════════════════
+// ANALOG SWEEP TRAILS (smooth second hand + comet tail)
+// ═══════════════════════════════════════
+const analogTrailsCanvas = document.getElementById('analog-trails-canvas');
+const analogTrailsCtx = analogTrailsCanvas.getContext('2d');
+const setAnalogTrailsCanvasPresent = makeCanvasPresence(analogTrailsCanvas);
+let analogTrailsDpr = 1;
+const ANALOG_TRAIL_ARC = 0.6;     // radians of sweep behind the tip (~5.7s)
+const ANALOG_TRAIL_SAMPLES = 28;
+
+function isAnalogViewActive() {
+  const el = document.getElementById('view-analog');
+  return !!el && el.classList.contains('active');
+}
+
+// DOM-sourced, not the raw `showSeconds` variable — that `let` is declared
+// later in the file (Seconds Toggle section) and this module's setup code
+// (Renderer.register's synchronous when() check) runs before it, same trap
+// as isGlobeViewActive()/isHorizonViewActive() above.
+function secondsShown() {
+  return !document.body.classList.contains('no-seconds');
+}
+
+function analogTrailsEnabled() {
+  return Settings.get('trails') && secondsShown() && !effectiveReduceMotion();
+}
+
+function analogTrailsAnimating() {
+  return analogTrailsEnabled() && isAnalogViewActive();
+}
+
+function drawAnalogTrails(now) {
+  analogTrailsDpr = sizeCanvas(analogTrailsCanvas);
+  const w = analogTrailsCanvas.width, h = analogTrailsCanvas.height;
+  analogTrailsCtx.clearRect(0, 0, w, h);
+  if (!analogTrailsEnabled() || w === 0 || h === 0) return;
+
+  // Seconds are timezone-invariant (all zones tick the same physical
+  // second), so one sweep angle serves every clock face.
+  const d = Clock.now();
+  const secFrac = d.getSeconds() + d.getMilliseconds() / 1000;
+  const angle = secFrac * 6 * Math.PI / 180; // matches the SVG hand's own angle formula
+
+  const canvasRect = analogTrailsCanvas.getBoundingClientRect();
+  analogClocks.forEach(({ svg }) => {
+    const r = svg.getBoundingClientRect();
+    if (r.width === 0) return; // not currently laid out (different view)
+    const cx = (r.left + r.width / 2 - canvasRect.left) * analogTrailsDpr;
+    const cy = (r.top + r.height / 2 - canvasRect.top) * analogTrailsDpr;
+    const scale = (r.width / 200) * analogTrailsDpr; // svg viewBox is 200 units wide
+    const handLen = 75 * scale;
+
+    // Comet tail chasing the hand tip: a tapered arc at the tip radius,
+    // resampled analytically from the current angle each frame.
+    const trailPts = [];
+    for (let i = 0; i < ANALOG_TRAIL_SAMPLES; i++) {
+      const a = angle - (1 - i / (ANALOG_TRAIL_SAMPLES - 1)) * ANALOG_TRAIL_ARC;
+      trailPts.push({ x: cx + handLen * Math.sin(a), y: cy - handLen * Math.cos(a) });
+    }
+    drawTaperedTrail(analogTrailsCtx, trailPts, '#ef4444', 2.4 * scale, 0.55);
+
+    // Current sweeping second hand — smooth (fractional-second) position,
+    // same color/width as the SVG hand it replaces.
+    analogTrailsCtx.strokeStyle = '#ef4444';
+    analogTrailsCtx.lineWidth = 1.2 * scale;
+    analogTrailsCtx.lineCap = 'round';
+    analogTrailsCtx.beginPath();
+    analogTrailsCtx.moveTo(cx, cy);
+    analogTrailsCtx.lineTo(cx + handLen * Math.sin(angle), cy - handLen * Math.cos(angle));
+    analogTrailsCtx.stroke();
+  });
+}
+
+function applyAnalogTrailsVisibility() {
+  const on = analogTrailsEnabled();
+  setAnalogTrailsCanvasPresent(on);
+  document.body.classList.toggle('analog-trails-on', on);
+}
+
+function refreshAnalogTrails() {
+  applyAnalogTrailsVisibility();
+  if (analogTrailsEnabled()) drawAnalogTrails(performance.now());
+  Renderer.ensureLoop();
+}
+
+Renderer.register('analog-trails', { when: analogTrailsAnimating, draw: drawAnalogTrails });
+window.addEventListener('resize', () => { if (isAnalogViewActive()) drawAnalogTrails(performance.now()); });
+applyAnalogTrailsVisibility();
+
+// ═══════════════════════════════════════
+// TIME TRAVEL (pause / speed / reverse / scrub — built on Clock.pump())
+// ═══════════════════════════════════════
+const timeHudEl = document.getElementById('time-hud');
+const timeHudDotEl = document.getElementById('time-hud-dot');
+const timeHudTextEl = document.getElementById('time-hud-text');
+const timeScrubberEl = document.getElementById('time-scrubber');
+const TimeControls = { dragging: false, lastNonZeroSpeed: 1 };
+
+// Fast-forward/reverse or an active scrub drag both cause many successive
+// digit changes per second — skip the flip-tile animation in that window so
+// tiles just swap (avoids visual thrash), matching the plan's guard.
+function shouldSuppressFlipAnim() {
+  return Math.abs(Clock.speed) > 2 || TimeControls.dragging;
+}
+
+function fmtHudDuration(ms) {
+  const sign = ms >= 0 ? '+' : '-';
+  const totalMin = Math.round(Math.abs(ms) / 60000);
+  const hh = Math.floor(totalMin / 60), mm = totalMin % 60;
+  return `${sign}${hh}h ${String(mm).padStart(2, '0')}m`;
+}
+
+function refreshTimeHud() {
+  const on = Settings.get('timeControls');
+  timeHudEl.classList.toggle('show', on);
+  if (!on) { timeScrubberEl.classList.remove('show'); return; }
+
+  if (Clock.live()) {
+    timeHudDotEl.classList.remove('scrubbed');
+    timeHudTextEl.textContent = 'LIVE';
+    if (!TimeControls.dragging) { timeScrubberEl.classList.remove('show'); timeScrubberEl.value = 0; }
+  } else {
+    timeHudDotEl.classList.add('scrubbed');
+    const now = Clock.now();
+    const diffMs = now.getTime() - Date.now();
+    const dateStr = now.toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+    const speedStr = Clock.speed === 0 ? 'PAUSED' : `${Clock.speed < 0 ? '◄ ' : ''}${Math.abs(Clock.speed)}×`;
+    timeHudTextEl.textContent = `${fmtHudDuration(diffMs)} · ${dateStr} · ${speedStr}`;
+    timeScrubberEl.classList.add('show');
+    if (!TimeControls.dragging) timeScrubberEl.value = Math.max(-1440, Math.min(1440, Math.round(diffMs / 60000)));
+  }
+}
+
+function resetClockToLive() {
+  Clock.reset();
+  tick();
+  Renderer.ensureLoop();
+  showToast('LIVE');
+}
+
+function togglePause() {
+  if (!Settings.get('timeControls')) return;
+  if (Clock.speed === 0) {
+    Clock.speed = TimeControls.lastNonZeroSpeed || 1;
+  } else {
+    TimeControls.lastNonZeroSpeed = Clock.speed;
+    Clock.speed = 0;
+  }
+  tick();
+  Renderer.ensureLoop();
+}
+
+function scaleClockSpeed(factor) {
+  if (!Settings.get('timeControls')) return;
+  const sign = Clock.speed < 0 ? -1 : 1;
+  const mag = Math.max(0.1, Math.min(512, Math.abs(Clock.speed || 1) * factor));
+  Clock.speed = sign * mag;
+  tick();
+  Renderer.ensureLoop();
+}
+
+function reverseClockSpeed() {
+  if (!Settings.get('timeControls')) return;
+  Clock.speed = Clock.speed === 0 ? -1 : -Clock.speed;
+  tick();
+  Renderer.ensureLoop();
+}
+
+function stepClockMinutes(delta) {
+  if (!Settings.get('timeControls')) return;
+  Clock.offsetMs += delta * 60000;
+  tick();
+  Renderer.ensureLoop();
+}
+
+function onTimeControlsToggle() {
+  if (!Settings.get('timeControls')) resetClockToLive();
+  else { tick(); Renderer.ensureLoop(); }
+}
+
+function timeScrubActive() {
+  return Settings.get('timeControls') && !Clock.live();
+}
+
+// Drives Clock.pump() + a full app tick() every frame while not live, so
+// fast-forward/reverse/scrub feel smooth across every view, not just the
+// currently-animating one.
+Renderer.register('time-scrub', { when: timeScrubActive, draw: () => { Clock.pump(); tick(); } });
+
+timeHudEl.addEventListener('click', resetClockToLive);
+
+timeScrubberEl.addEventListener('pointerdown', () => { TimeControls.dragging = true; });
+timeScrubberEl.addEventListener('input', () => {
+  const minutes = parseInt(timeScrubberEl.value, 10);
+  Clock.offsetMs = minutes * 60000;
+  Clock.speed = 0; // scrubbing means "inspect this moment" — pause here
+  tick();
+  Renderer.ensureLoop();
+});
+function endScrubDrag() { TimeControls.dragging = false; refreshTimeHud(); }
+timeScrubberEl.addEventListener('pointerup', endScrubDrag);
+timeScrubberEl.addEventListener('pointercancel', endScrubDrag);
+
+refreshTimeHud();
+
+// ═══════════════════════════════════════
+// SETTINGS PANEL
+// ═══════════════════════════════════════
+const SETTINGS_SCHEMA = [
+  { group: 'Ambience', items: [
+    { key: 'starfield', label: 'Starfield background', type: 'bool', onChange: refreshBackground },
+    { key: 'twinkle', label: 'Star twinkle', type: 'bool', onChange: refreshBackground },
+    { key: 'comet', label: 'Hourly shooting star', type: 'bool', onChange: refreshBackground },
+    { key: 'reduceMotion', label: 'Reduce motion', type: 'tristate', onChange: () => { refreshBackground(); refreshGlobeShading(); refreshHorizonGlow(); refreshAnalogTrails(); refreshOrbit(); refreshSolar(); } },
+  ]},
+  { group: 'Views', items: [
+    { key: 'globeShading', label: 'Globe: 3D shading', type: 'bool', onChange: refreshGlobeShading },
+    { key: 'atmosphere', label: 'Globe: atmosphere glow', type: 'bool', onChange: refreshGlobeShading },
+    { key: 'horizonGlow', label: 'Horizon: sun & moon glow', type: 'bool', onChange: refreshHorizonGlow },
+    { key: 'trails', label: 'Motion trails', type: 'bool', onChange: () => { refreshAnalogTrails(); refreshOrbit(); refreshSolar(); } },
+    { key: 'orbitRings', label: 'Orbit: guide rings', type: 'bool', onChange: refreshOrbit },
+    { key: 'orbitLabels', label: 'Orbit: city labels', type: 'bool', onChange: refreshOrbit },
+  ]},
+  { group: 'Solar System', items: [
+    { key: 'solarLapse', label: 'Time-lapse motion', type: 'bool', onChange: () => { solarLapseMs = 0; refreshSolar(); } },
+    { key: 'solarClock', label: 'Faded background clock', type: 'bool', onChange: refreshSolar },
+    { key: 'solarMoons', label: 'Moons', type: 'bool', onChange: refreshSolar },
+    { key: 'solarBelt', label: 'Asteroid belt', type: 'bool', onChange: refreshSolar },
+    { key: 'solarOrbits', label: 'Orbit rings', type: 'bool', onChange: refreshSolar },
+    { key: 'solarLabels', label: 'Planet labels', type: 'bool', onChange: refreshSolar },
+  ]},
+  { group: 'Interaction', items: [
+    { key: 'tooltips', label: 'Hover facts (Solar view)', type: 'bool', onChange: refreshSolar },
+    { key: 'timeControls', label: 'Time-travel controls', type: 'bool', onChange: onTimeControlsToggle },
+  ]},
+  { group: 'Performance', items: [
+    { key: 'fps', label: 'Show FPS counter', type: 'bool', onChange: applyFpsState },
+  ]},
+];
+
+function buildSettingsPanel() {
+  const body = document.getElementById('settings-body');
+  body.innerHTML = '';
+  SETTINGS_SCHEMA.forEach(({ group, items }) => {
+    const title = document.createElement('div');
+    title.className = 'settings-group-title';
+    title.textContent = group;
+    body.appendChild(title);
+    items.forEach(item => body.appendChild(buildSettingsRow(item)));
+  });
+}
+
+function buildSettingsRow(item) {
+  const row = document.createElement('div');
+  row.className = 'settings-row';
+  const label = document.createElement('label');
+  label.textContent = item.label;
+  row.appendChild(label);
+
+  if (item.type === 'bool') {
+    const sw = document.createElement('button');
+    sw.className = 'settings-toggle-switch' + (Settings.get(item.key) ? ' on' : '');
+    sw.setAttribute('role', 'switch');
+    sw.setAttribute('aria-checked', String(!!Settings.get(item.key)));
+    sw.addEventListener('click', () => {
+      const val = !Settings.get(item.key);
+      Settings.set(item.key, val);
+      sw.classList.toggle('on', val);
+      sw.setAttribute('aria-checked', String(val));
+      if (item.onChange) item.onChange();
+    });
+    row.appendChild(sw);
+  } else if (item.type === 'tristate') {
+    const sel = document.createElement('select');
+    [['', 'System default'], ['on', 'On'], ['off', 'Off']].forEach(([v, l]) => {
+      const opt = document.createElement('option');
+      opt.value = v; opt.textContent = l;
+      sel.appendChild(opt);
+    });
+    const cur = Settings.get(item.key);
+    sel.value = cur === true ? 'on' : cur === false ? 'off' : '';
+    sel.addEventListener('change', () => {
+      const val = sel.value === 'on' ? true : sel.value === 'off' ? false : null;
+      Settings.set(item.key, val);
+      if (item.onChange) item.onChange();
+    });
+    row.appendChild(sel);
+  }
+  return row;
+}
+
+const settingsBackdrop = document.getElementById('settings-backdrop');
+const settingsOpen = () => settingsBackdrop.classList.contains('open');
+function openSettings() { buildSettingsPanel(); settingsBackdrop.classList.add('open'); }
+function closeSettings() { settingsBackdrop.classList.remove('open'); }
+document.getElementById('settings-toggle').addEventListener('click', openSettings);
+document.getElementById('settings-close').addEventListener('click', closeSettings);
+settingsBackdrop.addEventListener('mousedown', e => { if (e.target === settingsBackdrop) closeSettings(); });
+document.getElementById('settings-reset').addEventListener('click', () => {
+  Settings.reset();
+  applyFpsState();
+  buildSettingsPanel();
+  showToast('Settings reset to defaults');
+});
+
 // ── Shared Data ──
 const ZONES = [
   { label: 'US West Coast',    tz: 'America/Los_Angeles' },
@@ -534,7 +1580,7 @@ const ZONES = [
 ];
 
 function getTimeParts(tz) {
-  const now = new Date();
+  const now = Clock.now();
   const fmt = new Intl.DateTimeFormat('en-GB', {
     timeZone: tz, hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false
   });
@@ -566,8 +1612,13 @@ secBtn.addEventListener('click', () => {
   showSeconds = !showSeconds;
   localStorage.setItem('worldclock-seconds', showSeconds ? 'on' : 'off');
   applySecondsState();
+  refreshAnalogTrails();
 });
 applySecondsState();
+// Re-evaluate now that body.no-seconds reflects the real saved preference —
+// the Analog Trails module's own setup ran before this and only saw the
+// default (seconds shown).
+applyAnalogTrailsVisibility();
 
 function fmtTime(t) {
   return showSeconds ? t.timeStr : `${t.h}:${t.m}`;
@@ -590,8 +1641,38 @@ buttons.forEach(b => {
   if (b.dataset.view) b.addEventListener('click', () => switchView(b.dataset.view));
 });
 document.addEventListener('keydown', e => {
-  if (e.key >= '1' && e.key <= '5') {
-    switchView(['flip','analog','globe','map','horizon'][e.key-1]);
+  if (settingsOpen()) {
+    if (e.key === 'Escape') closeSettings();
+    return;
+  }
+  if (e.key >= '1' && e.key <= '7') {
+    switchView(['flip','analog','globe','map','horizon','orbit','solar'][e.key-1]);
+    return;
+  }
+  if (e.key === 'f' || e.key === 'F') {
+    Settings.set('fps', !Settings.get('fps'));
+    applyFpsState();
+    return;
+  }
+  // Time-travel controls — all inert (and Clock stays LIVE) when the
+  // timeControls setting is off; each handler below re-checks it too.
+  if (e.key === ' ') {
+    const tag = document.activeElement && document.activeElement.tagName;
+    if (['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'A'].includes(tag)) return; // don't hijack keyboard activation
+    e.preventDefault();
+    togglePause();
+  } else if (e.key === '+' || e.key === '=') {
+    scaleClockSpeed(2);
+  } else if (e.key === '-' || e.key === '_') {
+    scaleClockSpeed(0.5);
+  } else if (e.key === 'r' || e.key === 'R') {
+    reverseClockSpeed();
+  } else if (e.key === ',') {
+    stepClockMinutes(-1);
+  } else if (e.key === '.') {
+    stepClockMinutes(1);
+  } else if (e.key === '0') {
+    resetClockToLive();
   }
 });
 
@@ -625,14 +1706,19 @@ ZONES.forEach(zone => {
 });
 
 function updateFlip() {
+  const suppressAnim = shouldSuppressFlipAnim();
   flipDigits.forEach(({zone, d, dateLine, cell}) => {
     const t = getTimeParts(zone.tz);
     [['h0',t.h[0]],['h1',t.h[1]],['m0',t.m[0]],['m1',t.m[1]],['s0',t.s[0]],['s1',t.s[1]]].forEach(([k,v]) => {
       const tile = d[k];
       if (tile._val !== v) {
         tile._val = v;
-        tile.classList.remove('flip'); void tile.offsetWidth; tile.classList.add('flip');
-        setTimeout(() => { tile.querySelector('span').textContent = v; }, 200);
+        if (suppressAnim) {
+          tile.querySelector('span').textContent = v;
+        } else {
+          tile.classList.remove('flip'); void tile.offsetWidth; tile.classList.add('flip');
+          setTimeout(() => { tile.querySelector('span').textContent = v; }, 200);
+        }
       }
     });
     dateLine.innerHTML = `${dotHTML(t.isDay)}${t.dateStr}`;
@@ -701,7 +1787,7 @@ ZONES.forEach(zone => {
   cell.appendChild(digital);
   cell.appendChild(dateLine);
   document.getElementById('analog-grid').appendChild(cell);
-  analogClocks.push({ zone, hourH, minH, secH, digital, dateLine, cell });
+  analogClocks.push({ zone, svg, hourH, minH, secH, digital, dateLine, cell });
 });
 
 function updateAnalog() {
@@ -724,6 +1810,7 @@ function updateAnalog() {
     cell.classList.toggle('is-day', t.isDay);
     cell.classList.toggle('is-night', !t.isDay);
   });
+  drawAnalogTrails(performance.now());
 }
 
 // ═══════════════════════════════════════
@@ -753,13 +1840,17 @@ function updateGlobe() {
     card.classList.toggle('is-day', t.isDay);
     card.classList.toggle('is-night', !t.isDay);
   });
-  // Update day/night terminator — sun angle rotates 360° over 24 hours
-  const now = new Date();
-  const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
-  const sunAngle = ((utcH / 24) * 360 + 180) % 360;
-  const terminator = document.getElementById('globe-terminator');
-  if (terminator) {
-    terminator.style.background = `linear-gradient(${sunAngle}deg, rgba(0,5,25,0.80) 0%, rgba(0,8,35,0.55) 18%, rgba(0,10,50,0.20) 36%, transparent 46%, transparent 54%, rgba(255,220,120,0.07) 64%, rgba(255,200,90,0.12) 80%, rgba(255,180,60,0.16) 100%)`;
+  if (Settings.get('globeShading')) {
+    drawGlobeShade(performance.now());
+  } else {
+    // Legacy CSS terminator — sun angle rotates 360° over 24 hours
+    const now = Clock.now();
+    const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+    const sunAngle = ((utcH / 24) * 360 + 180) % 360;
+    const terminator = document.getElementById('globe-terminator');
+    if (terminator) {
+      terminator.style.background = `linear-gradient(${sunAngle}deg, rgba(0,5,25,0.80) 0%, rgba(0,8,35,0.55) 18%, rgba(0,10,50,0.20) 36%, transparent 46%, transparent 54%, rgba(255,220,120,0.07) 64%, rgba(255,200,90,0.12) 80%, rgba(255,180,60,0.16) 100%)`;
+    }
   }
 }
 
@@ -850,17 +1941,829 @@ function updateHorizon() {
     mk.style.left = `${pct}%`;
     timeEl.textContent = fmtTime(t);
   });
+  drawHorizonGlow(performance.now());
 }
+
+// ═══════════════════════════════════════
+// VIEW 6: ORBIT (cities as planets around Earth)
+// ═══════════════════════════════════════
+const orbitCanvas = document.getElementById('orbit-canvas');
+const orbitCtx = orbitCanvas.getContext('2d');
+let orbitDpr = 1;
+
+const ORBIT_INNER_FRAC = 0.30;
+const ORBIT_OUTER_FRAC = 0.92;
+// Decorative angular span, not a real time window: at the true angular
+// velocity (one lap per 24h) any real-time tail is sub-pixel. 0.35 rad
+// represents the last ~80 minutes of local time.
+const ORBIT_TRAIL_SPAN = 0.35;
+const ORBIT_TRAIL_SAMPLES = 24;
+
+function isOrbitViewActive() {
+  const el = document.getElementById('view-orbit');
+  return !!el && el.classList.contains('active');
+}
+
+function hexToRgba(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha.toFixed(3)})`;
+}
+
+// Minutes east of UTC for `tz` at the given instant (handles DST correctly,
+// since it reads the zone's actual current wall-clock offset rather than a
+// static lookup table).
+function utcOffsetMinutes(tz, at) {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour12: false,
+    year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric',
+  });
+  const p = fmt.formatToParts(at);
+  const get = (t) => parseInt(p.find(x => x.type === t).value, 10);
+  const asUTC = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'));
+  return (asUTC - at.getTime()) / 60000;
+}
+
+// Orbit angle for a zone at a given instant. Noon local solar time -> angle 0
+// (sun-facing side, matching drawSunGlow's fixed position); midnight -> PI
+// (opposite side). Matches projectCore's convention: angle 0 = +X, depth 0.
+function orbitAngleAt(tz, at) {
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  });
+  const p = fmt.formatToParts(at);
+  const h = parseInt(p.find(x => x.type === 'hour').value, 10);
+  const m = parseInt(p.find(x => x.type === 'minute').value, 10);
+  const s = parseInt(p.find(x => x.type === 'second').value, 10);
+  const hourFrac = h + m / 60 + s / 3600;
+  return ((hourFrac - 12) / 24) * Math.PI * 2;
+}
+
+// Ports Skai-demo's projectCore: a top-down orbital position tilted into a
+// pseudo-3D view. angle 0 = +X (toward the sun marker), depth > 0 = nearer
+// the viewer (drawn in front), depth < 0 = farther (drawn behind).
+function projectCore(cx, cy, cam, orbitPx, angle) {
+  const wx = orbitPx * Math.cos(angle);
+  const wz = orbitPx * Math.sin(angle);
+  return { x: cx + wx * cam.zoom, y: cy + wz * cam.zoom * cam.tiltY, depth: wz };
+}
+
+// Ports Skai-demo's shadeSphere, parameterized by an explicit light direction
+// instead of "toward canvas center" (Earth sits at center here, not the sun).
+function shadeSphereDirectional(g, x, y, radius, lightDx, lightDy) {
+  if (radius < 1.2) return;
+  const litx = x + lightDx * radius, lity = y + lightDy * radius;
+  const darkx = x - lightDx * radius, darky = y - lightDy * radius;
+  let grad = g.createLinearGradient(litx, lity, darkx, darky);
+  grad.addColorStop(0,    'rgba(0,0,0,0)');
+  grad.addColorStop(0.45, 'rgba(0,0,0,0)');
+  grad.addColorStop(1,    'rgba(0,0,0,0.86)');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(x, y, radius, 0, Math.PI * 2); g.fill();
+
+  const hix = x + lightDx * radius * 0.45, hiy = y + lightDy * radius * 0.45;
+  grad = g.createRadialGradient(hix, hiy, 0, hix, hiy, radius * 1.2);
+  grad.addColorStop(0, 'rgba(255,255,255,0.22)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(x, y, radius, 0, Math.PI * 2); g.fill();
+}
+
+function strokeOrbitRing(g, cx, cy, cam, orbitPx, opts = {}) {
+  const { dashed = false, strokeStyle = 'rgba(51,68,102,0.4)', lineWidth = 1 } = opts;
+  const seg = 96;
+  g.beginPath();
+  for (let i = 0; i <= seg; i++) {
+    const p = projectCore(cx, cy, cam, orbitPx, (i / seg) * Math.PI * 2);
+    if (i === 0) g.moveTo(p.x, p.y); else g.lineTo(p.x, p.y);
+  }
+  g.lineWidth = lineWidth;
+  if (dashed) g.setLineDash([4 * lineWidth, 5 * lineWidth]);
+  g.strokeStyle = strokeStyle;
+  g.stroke();
+  if (dashed) g.setLineDash([]);
+}
+
+function drawSunGlow(g, cx, cy, cam, maxR) {
+  const p = projectCore(cx, cy, cam, maxR * 1.05, 0); // "noon" direction, just past the outer ring
+  const r = maxR * 0.22;
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  const grad = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+  grad.addColorStop(0,   'rgba(255,220,130,0.55)');
+  grad.addColorStop(0.5, 'rgba(255,170,60,0.18)');
+  grad.addColorStop(1,   'rgba(255,120,30,0)');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(p.x, p.y, r, 0, Math.PI * 2); g.fill();
+  g.restore();
+}
+
+function drawEarth(g, cx, cy, r) {
+  const grad = g.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r);
+  grad.addColorStop(0, '#2a5a8a');
+  grad.addColorStop(1, '#0f2745');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+  shadeSphereDirectional(g, cx, cy, r, 1, 0); // lit toward the sun marker (+X)
+
+  // Soft atmosphere rim, matching the Globe view's technique
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  const aGrad = g.createRadialGradient(cx, cy, r * 0.85, cx, cy, r * 1.08);
+  aGrad.addColorStop(0, 'rgba(100,180,255,0)');
+  aGrad.addColorStop(1, 'rgba(100,180,255,0.16)');
+  g.fillStyle = aGrad;
+  g.beginPath(); g.arc(cx, cy, r * 1.08, 0, Math.PI * 2); g.fill();
+  g.restore();
+}
+
+function drawCityTrail(g, cx, cy, cam, city, planetR) {
+  const pts = [];
+  for (let i = 0; i < ORBIT_TRAIL_SAMPLES; i++) {
+    const a = city.angle - (1 - i / (ORBIT_TRAIL_SAMPLES - 1)) * ORBIT_TRAIL_SPAN;
+    pts.push(projectCore(cx, cy, cam, city.orbitPx, a));
+  }
+  drawTaperedTrail(g, pts, city.color, planetR * 1.2, 0.4);
+}
+
+function drawCityLabel(g, pos, planetR, city) {
+  // All sizes in device px: the canvas has no dpr transform, so CSS-px font
+  // sizes would render half-size on retina displays.
+  const s = orbitDpr;
+  const timeStr = `${city.t.h}:${city.t.m}`;
+  g.textAlign = 'center';
+  g.textBaseline = 'alphabetic';
+  const y = pos.y - planetR - 8 * s;
+
+  g.font = `700 ${11 * s}px "Segoe UI", sans-serif`;
+  g.fillStyle = 'rgba(0,0,0,0.7)';
+  g.fillText(timeStr, pos.x + s, y + s);
+  g.fillStyle = city.isDay ? '#fde68a' : '#c7d2fe';
+  g.fillText(timeStr, pos.x, y);
+
+  g.font = `${9 * s}px "Segoe UI", sans-serif`;
+  g.fillStyle = 'rgba(0,0,0,0.7)';
+  g.fillText(city.zone.label, pos.x + s, y + 13 * s + s);
+  g.fillStyle = '#94a3b8';
+  g.fillText(city.zone.label, pos.x, y + 13 * s);
+  g.textAlign = 'left';
+}
+
+function drawOrbitBodies(g, cx, cy, cam, maxR, earthR, cities) {
+  const n = cities.length;
+  const planetR = maxR * 0.045;
+  const depths = cities.map(city => projectCore(cx, cy, cam, city.orbitPx, city.angle).depth);
+  const order = cities.map((_, i) => i);
+  for (let i = 1; i < n; i++) { // insertion sort: far/back first
+    const k = order[i], dk = depths[k]; let j = i - 1;
+    while (j >= 0 && depths[order[j]] > dk) { order[j + 1] = order[j]; j--; }
+    order[j + 1] = k;
+  }
+
+  let earthDrawn = false;
+  for (let idx = 0; idx < n; idx++) {
+    const i = order[idx];
+    const city = cities[i];
+    if (!earthDrawn && depths[i] >= 0) { drawEarth(g, cx, cy, earthR); earthDrawn = true; }
+
+    if (Settings.get('trails') && !effectiveReduceMotion()) drawCityTrail(g, cx, cy, cam, city, planetR);
+
+    const pos = projectCore(cx, cy, cam, city.orbitPx, city.angle);
+    g.fillStyle = city.color;
+    g.beginPath(); g.arc(pos.x, pos.y, planetR, 0, Math.PI * 2); g.fill();
+    shadeSphereDirectional(g, pos.x, pos.y, planetR, 1, 0);
+
+    if (Settings.get('orbitLabels')) drawCityLabel(g, pos, planetR, city);
+  }
+  if (!earthDrawn) drawEarth(g, cx, cy, earthR);
+}
+
+function orderedZonesByOffset(at) {
+  return ZONES
+    .map(zone => ({ zone, offset: utcOffsetMinutes(zone.tz, at) }))
+    .sort((a, b) => a.offset - b.offset)
+    .map(({ zone }) => zone);
+}
+
+function buildOrbitCities(maxR, at) {
+  const ordered = orderedZonesByOffset(at);
+  const n = ordered.length;
+  return ordered.map((zone, i) => {
+    const frac = n === 1 ? 0 : i / (n - 1);
+    const orbitPx = maxR * (ORBIT_INNER_FRAC + (ORBIT_OUTER_FRAC - ORBIT_INNER_FRAC) * frac);
+    const angle = orbitAngleAt(zone.tz, at);
+    const t = getTimeParts(zone.tz);
+    return { zone, orbitPx, angle, t, isDay: t.isDay, color: t.isDay ? '#facc15' : '#6366f1' };
+  });
+}
+
+function drawOrbit(now) {
+  orbitDpr = sizeCanvas(orbitCanvas);
+  const w = orbitCanvas.width, h = orbitCanvas.height;
+  orbitCtx.clearRect(0, 0, w, h);
+  if (w === 0 || h === 0) return;
+
+  const maxR = Math.min(w, h) * 0.42;
+  const cx = w / 2, cy = h / 2;
+  const cam = { zoom: 1, tiltY: 0.55 };
+  const earthR = maxR * 0.14;
+  const at = Clock.now();
+  const cities = buildOrbitCities(maxR, at);
+
+  if (Settings.get('orbitRings')) {
+    cities.forEach(city => strokeOrbitRing(orbitCtx, cx, cy, cam, city.orbitPx, { lineWidth: orbitDpr }));
+  }
+  drawSunGlow(orbitCtx, cx, cy, cam, maxR);
+  drawOrbitBodies(orbitCtx, cx, cy, cam, maxR, earthR, cities);
+}
+
+function orbitAnimActive() {
+  return isOrbitViewActive() && !effectiveReduceMotion();
+}
+
+function refreshOrbit() {
+  if (isOrbitViewActive()) drawOrbit(performance.now());
+  Renderer.ensureLoop();
+}
+
+Renderer.register('orbit', { when: orbitAnimActive, draw: drawOrbit });
+window.addEventListener('resize', () => { if (isOrbitViewActive()) drawOrbit(performance.now()); });
+
+function updateOrbit() {
+  drawOrbit(performance.now());
+}
+
+// ═══════════════════════════════════════
+// VIEW 7: SOLAR SYSTEM (SkiaSharp-demo port on real astronomy)
+// ═══════════════════════════════════════
+const solarCanvas = document.getElementById('solar-canvas');
+const solarCtx = solarCanvas.getContext('2d');
+let solarDpr = 1;
+
+const J2000_MS = 946728000000; // 2000-01-01T12:00Z
+const SOLAR_LAPSE_DAYS_PER_SEC = 2;   // 1 real second ≈ 2 sim days at 1× Clock speed
+const SOLAR_LAPSE_K = SOLAR_LAPSE_DAYS_PER_SEC * 86400; // sim-time multiplier while lapse is on
+const SOLAR_MOON_MAX_REV_PER_SEC = 0.4; // display cap under lapse (see solarMoonAngle)
+const SOLAR_TRAIL_SPAN = 0.55;  // radians of orbit arc behind each planet
+const SOLAR_TRAIL_SAMPLES = 28;
+
+// J2000 mean orbital elements (JPL/Standish approximate table, valid 1800–2050):
+// a = semi-major axis (AU), T = sidereal period (days), lam0 = mean longitude
+// at epoch (deg), e = eccentricity, peri = longitude of perihelion (deg).
+// Visual size/color/fact/moons carried over from the SkiaSharp demo.
+// Moons: dist/size are aesthetic (demo values); T is the real sidereal period
+// in days — negative T = retrograde (Triton).
+const SOLAR_PLANETS = [
+  { name: 'Mercury', a: 0.387, T: 87.969, lam0: 252.2503, e: 0.20564, peri: 77.4578,
+    color: '#9C9A96', size: 3.0, ring: false, dwarf: false,
+    fact: 'Smallest planet and the closest to the Sun.', moons: [] },
+  { name: 'Venus', a: 0.723, T: 224.701, lam0: 181.9791, e: 0.00678, peri: 131.6025,
+    color: '#E6C88E', size: 5.0, ring: false, dwarf: false,
+    fact: 'Hottest planet, wrapped in thick CO₂ cloud.', moons: [] },
+  { name: 'Earth', a: 1.0, T: 365.256, lam0: 100.4646, e: 0.01671, peri: 102.9377,
+    color: '#4F86C6', size: 5.5, ring: false, dwarf: false,
+    fact: 'Our home — the only world known to host life.',
+    moons: [ { name: 'Moon', dist: 13, size: 2.0, T: 27.322, color: '#C9C9C9' } ] },
+  { name: 'Mars', a: 1.524, T: 686.980, lam0: 355.4466, e: 0.09339, peri: 336.0564,
+    color: '#C1440E', size: 4.0, ring: false, dwarf: false,
+    fact: 'The red planet, coloured by iron-oxide dust.',
+    moons: [ { name: 'Phobos', dist: 8, size: 1.2, T: 0.3189, color: '#8A7E70' },
+             { name: 'Deimos', dist: 12, size: 1.1, T: 1.2624, color: '#9A8E80' } ] },
+  // TODO: Ceres lam0 is approximate (±tens of degrees) — verify against JPL
+  // SBDB if dwarf-planet phase accuracy ever matters. e/peri/T are solid.
+  { name: 'Ceres', a: 2.767, T: 1681.6, lam0: 249.9, e: 0.0758, peri: 153.9,
+    color: '#A89A88', size: 2.5, ring: false, dwarf: true,
+    fact: 'Largest object in the asteroid belt — a dwarf planet.', moons: [] },
+  { name: 'Jupiter', a: 5.203, T: 4332.59, lam0: 34.3964, e: 0.04839, peri: 14.7285,
+    color: '#CE9A5E', size: 13.0, ring: false, dwarf: false,
+    fact: 'Largest planet, home of the Great Red Spot.',
+    moons: [ { name: 'Io', dist: 20, size: 1.8, T: 1.7691, color: '#E8D24B' },
+             { name: 'Europa', dist: 27, size: 1.7, T: 3.5512, color: '#DDE6F0' },
+             { name: 'Ganymede', dist: 34, size: 2.6, T: 7.1546, color: '#9C8E7A' },
+             { name: 'Callisto', dist: 42, size: 2.4, T: 16.689, color: '#6E6256' } ] },
+  { name: 'Saturn', a: 9.537, T: 10759.22, lam0: 49.9542, e: 0.05386, peri: 92.5989,
+    color: '#E0C892', size: 11.0, ring: true, dwarf: false,
+    fact: 'Gas giant famous for its bright ring system.',
+    moons: [ { name: 'Rhea', dist: 37, size: 1.6, T: 4.5182, color: '#CFE0E6' },
+             { name: 'Titan', dist: 46, size: 2.6, T: 15.945, color: '#E0A24A' } ] },
+  { name: 'Uranus', a: 19.19, T: 30688.5, lam0: 313.2381, e: 0.04726, peri: 170.9543,
+    color: '#9FE3DA', size: 8.0, ring: false, dwarf: false,
+    fact: 'An ice giant that rolls along on its side.',
+    moons: [ { name: 'Titania', dist: 17, size: 1.8, T: 8.706, color: '#A9B0B8' },
+             { name: 'Oberon', dist: 24, size: 1.7, T: 13.463, color: '#9AA2AA' } ] },
+  { name: 'Neptune', a: 30.07, T: 60182, lam0: 304.8800, e: 0.00859, peri: 44.9648,
+    color: '#3D5EF0', size: 7.5, ring: false, dwarf: false,
+    fact: 'Farthest planet, whipped by the fastest winds.',
+    moons: [ { name: 'Triton', dist: 16, size: 2.0, T: -5.877, color: '#D9C7C0' } ] },
+  { name: 'Pluto', a: 39.48, T: 90560, lam0: 238.9290, e: 0.24883, peri: 224.0669,
+    color: '#C9B8A0', size: 2.6, ring: false, dwarf: true,
+    fact: 'A dwarf planet in the icy Kuiper Belt beyond Neptune.',
+    moons: [ { name: 'Charon', dist: 7, size: 1.3, T: 6.387, color: '#B9B2AA' } ] },
+];
+
+const SOLAR_COMET = {
+  name: 'Comet', A: 0.92, E: 0.62, T: 400, // decorative period in days
+  color: '#CFECFF',
+  fact: 'An icy wanderer on an eccentric orbit; its glowing tail always points away from the Sun.',
+};
+
+// ── Astronomy math ──────────────────────────────────────────────────────────
+function solarDaysSinceJ2000(ms) { return (ms - J2000_MS) / 86400000; }
+
+// Log-compressed real orbital spacing: Mercury at 0.18·maxR, Pluto at 1.0·maxR.
+function solarOrbitFrac(a) {
+  return 0.18 + 0.82 * Math.log(a / 0.387) / Math.log(39.48 / 0.387);
+}
+
+// Heliocentric ecliptic longitude in RADIANS: mean longitude plus the
+// second-order equation of center (the e² term matters for Pluto, e≈0.25,
+// which is ~4.5° off with the first-order term alone).
+function solarPlanetAngle(p, ms) {
+  const d = solarDaysSinceJ2000(ms);
+  const lam = (p.lam0 + 360 * d / p.T) * Math.PI / 180;
+  const M = lam - p.peri * Math.PI / 180;
+  return lam + 2 * p.e * Math.sin(M) + 1.25 * p.e * p.e * Math.sin(2 * M);
+}
+
+// projectCore's y-down screen makes positive angles run clockwise — the view
+// from ecliptic SOUTH. Negating gives the canonical counterclockwise view
+// from ecliptic north, matching real sky charts and planetarium apps.
+function solarScreenAngle(theta) { return -theta; }
+
+// Moon angle as a PURE function of the effective date (deterministic under
+// scrub/reverse — no integrator state). Under lapse, fast moons are capped
+// at SOLAR_MOON_MAX_REV_PER_SEC by inflating their display period (Phobos at
+// true speed would be a 6 rev/s blur); with lapse off, true periods are used.
+function solarMoonAngle(moon, ms, lapseOn) {
+  const T = Math.abs(moon.T);
+  const minT = SOLAR_LAPSE_DAYS_PER_SEC / SOLAR_MOON_MAX_REV_PER_SEC; // = 5 days
+  const Tdisp = lapseOn ? Math.max(T, minT) : T;
+  const sign = moon.T < 0 ? -1 : 1;
+  const phase = (hashStringToSeed(moon.name) % 360) * Math.PI / 180;
+  return sign * 2 * Math.PI * solarDaysSinceJ2000(ms) / Tdisp + phase;
+}
+
+function solarCometTheta(ms) {
+  return 2 * Math.PI * solarDaysSinceJ2000(ms) / SOLAR_COMET.T + 0.7;
+}
+
+// ── Time-lapse accumulator ──────────────────────────────────────────────────
+let solarLapseMs = 0;
+let solarLastRealMs = null;
+let solarMotionSign = 1; // latched direction of effective-date motion (for trails)
+
+function advanceSolarLapse() {
+  const realMs = performance.now();
+  if (solarLastRealMs !== null) {
+    const dtReal = realMs - solarLastRealMs;
+    // The sim-time delta comes from INTENT (dtReal × Clock.speed), not from
+    // sampling Clock.now() between frames: pump() only counteracts real time
+    // on rAF boundaries, so sampled deltas jitter ±a-few-ms around zero while
+    // paused — and any −1ms sample would be amplified by K into a visible
+    // random-walk of the sim date. Intent gives an exact 0 when paused, and
+    // also means a ±24h scrub jump passes through 1:1 instead of being
+    // K-amplified into a ±5-year solar leap.
+    // Stale-delta guard: after a long real-time gap (other view, hidden tab),
+    // resync without accumulating — otherwise returning after an hour would
+    // leap the sim ~20 years.
+    if (dtReal <= 250 && Settings.get('solarLapse')) {
+      solarLapseMs += dtReal * Clock.speed * (SOLAR_LAPSE_K - 1);
+    }
+  }
+  if (Clock.speed !== 0) solarMotionSign = Math.sign(Clock.speed);
+  solarLastRealMs = realMs;
+}
+
+function solarEffectiveMs() { return Clock.now().getTime() + solarLapseMs; }
+
+// ── Camera & pointer state ──────────────────────────────────────────────────
+const SolarCam = { zoom: 1, panX: 0, panY: 0, tiltY: 0.55 };
+const SolarPointer = { x: 0, y: 0, inside: false, dragging: false, dragLast: { x: 0, y: 0 }, hover: null };
+let solarBodyCache = []; // per-frame projected body positions for hit-testing
+
+function isSolarViewActive() {
+  const el = document.getElementById('view-solar');
+  return !!el && el.classList.contains('active');
+}
+
+// ── Scene layers ────────────────────────────────────────────────────────────
+function drawSolarClockBackdrop(g, w, h) {
+  if (!Settings.get('solarClock')) return;
+  const now = Clock.now();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = `700 ${Math.round(h * 0.42)}px Consolas, 'Courier New', monospace`;
+  g.fillStyle = 'rgba(226,232,240,0.055)';
+  g.fillText(`${hh}:${mm}`, w / 2, h * 0.46);
+  g.font = `${Math.round(h * 0.042)}px Consolas, 'Courier New', monospace`;
+  g.fillStyle = 'rgba(226,232,240,0.07)';
+  g.fillText(now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), w / 2, h * 0.73);
+  if (Settings.get('solarLapse')) {
+    const sim = new Date(solarEffectiveMs());
+    const simStr = `SIM ${sim.getFullYear()}-${String(sim.getMonth() + 1).padStart(2, '0')}-${String(sim.getDate()).padStart(2, '0')}`;
+    g.font = `${Math.round(h * 0.032)}px Consolas, 'Courier New', monospace`;
+    g.fillStyle = 'rgba(245,158,11,0.10)';
+    g.fillText(simStr, w / 2, h * 0.73 + h * 0.055);
+  }
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+}
+
+function drawSolarSun(g, cx, cy, r, now) {
+  const flick = effectiveReduceMotion() ? 1 : 1 + 0.03 * Math.sin(now / 1000 * 2.3);
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  const br = r * 2.7 * flick;
+  let grad = g.createRadialGradient(cx, cy, 0, cx, cy, br);
+  grad.addColorStop(0,    'rgba(255,200,96,0.51)');
+  grad.addColorStop(0.45, 'rgba(255,119,16,0.12)');
+  grad.addColorStop(1,    'rgba(255,85,0,0)');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(cx, cy, br, 0, Math.PI * 2); g.fill();
+  g.restore();
+
+  grad = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+  grad.addColorStop(0,   'rgba(255,243,176,1)');
+  grad.addColorStop(0.6, 'rgba(255,154,30,1)');
+  grad.addColorStop(1,   'rgba(255,85,0,0)');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+}
+
+function drawSolarBelt(g, cx, cy, cam, maxR, effDays) {
+  const rand = mulberry32(99);
+  const count = Math.min(260, Math.round((solarCanvas.width * solarCanvas.height) / 12000));
+  const rot = effDays * 2 * Math.PI / 1682; // whole belt rotates at a Ceres-ish period
+  for (let i = 0; i < count; i++) {
+    const baseAng = rand() * Math.PI * 2;
+    const aAU = 2.2 + rand() * 1.1;
+    const rr = solarOrbitFrac(aAU) * maxR + (rand() - 0.5) * maxR * 0.02;
+    const alpha = 0.24 + rand() * 0.35;
+    const p = projectCore(cx, cy, cam, rr, solarScreenAngle(baseAng + rot));
+    g.fillStyle = `rgba(154,140,118,${alpha.toFixed(3)})`;
+    g.beginPath(); g.arc(p.x, p.y, 0.9 * solarDpr * cam.zoom, 0, Math.PI * 2); g.fill();
+  }
+}
+
+function drawSolarPlanetTrail(g, cx, cy, cam, item) {
+  const pts = [];
+  for (let i = 0; i < SOLAR_TRAIL_SAMPLES; i++) {
+    const thetaPast = item.theta - solarMotionSign * (1 - i / (SOLAR_TRAIL_SAMPLES - 1)) * SOLAR_TRAIL_SPAN;
+    pts.push(projectCore(cx, cy, cam, item.orbitPx, solarScreenAngle(thetaPast)));
+  }
+  drawTaperedTrail(g, pts, item.p.color, item.s * 1.4, 0.4);
+}
+
+function drawSolarRing(g, pos, s, color, front) {
+  g.save();
+  g.translate(pos.x, pos.y);
+  g.rotate(-18 * Math.PI / 180);
+  const start = (front ? 0 : 180) * Math.PI / 180;
+  const end = start + Math.PI;
+  g.lineWidth = 2 * solarDpr;
+  g.strokeStyle = hexToRgba(color, front ? 0.8 : 0.4);
+  g.beginPath(); g.ellipse(0, 0, s * 2.4, s * 0.7, 0, start, end); g.stroke();
+  g.lineWidth = solarDpr;
+  g.strokeStyle = hexToRgba(color, front ? 0.33 : 0.165);
+  g.beginPath(); g.ellipse(0, 0, s * 2.9, s * 0.85, 0, start, end); g.stroke();
+  g.restore();
+}
+
+function drawSolarMoonOrbits(g, cam, planetPos, p) {
+  const seg = 48;
+  g.lineWidth = solarDpr;
+  g.strokeStyle = 'rgba(85,102,136,0.165)';
+  for (const m of p.moons) {
+    g.beginPath();
+    for (let i = 0; i <= seg; i++) {
+      const pt = projectCore(planetPos.x, planetPos.y, cam, m.dist * solarDpr, (i / seg) * Math.PI * 2);
+      if (i === 0) g.moveTo(pt.x, pt.y); else g.lineTo(pt.x, pt.y);
+    }
+    g.stroke();
+  }
+}
+
+function drawSolarMoonBodies(g, cam, planetPos, planetDepth, p, effMs, lapseOn, sunX, sunY, back) {
+  for (const m of p.moons) {
+    const ang = solarScreenAngle(solarMoonAngle(m, effMs, lapseOn));
+    const mp = projectCore(planetPos.x, planetPos.y, cam, m.dist * solarDpr, ang);
+    if (back ? mp.depth >= 0 : mp.depth < 0) continue;
+    const ms = m.size * solarDpr * cam.zoom;
+    g.fillStyle = m.color;
+    g.beginPath(); g.arc(mp.x, mp.y, ms, 0, Math.PI * 2); g.fill();
+    const ldx = sunX - mp.x, ldy = sunY - mp.y;
+    const llen = Math.hypot(ldx, ldy) || 1;
+    shadeSphereDirectional(g, mp.x, mp.y, ms, ldx / llen, ldy / llen);
+    solarBodyCache.push({ name: m.name, fact: `Moon of ${p.name}.`, x: mp.x, y: mp.y, r: Math.max(ms, 4 * solarDpr), depth: planetDepth + mp.depth });
+  }
+}
+
+function drawSolarComet(g, cx, cy, cam, maxR, effMs) {
+  const theta = solarCometTheta(effMs);
+  const rFrac = (1 - SOLAR_COMET.E * SOLAR_COMET.E) / (1 + SOLAR_COMET.E * Math.cos(theta));
+  const pos = projectCore(cx, cy, cam, SOLAR_COMET.A * rFrac * maxR, solarScreenAngle(theta));
+  let dx = pos.x - cx, dy = pos.y - cy;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-3) return;
+  const ux = dx / len, uy = dy / len;
+  const scale = solarDpr * cam.zoom;
+
+  const near = Math.max(0, Math.min(1, ((1 + SOLAR_COMET.E) - rFrac) / (2 * SOLAR_COMET.E)));
+  const tailLen = (24 + 78 * near) * scale;
+  const headR = 2.6 * scale;
+  const tipx = pos.x + ux * tailLen, tipy = pos.y + uy * tailLen;
+  const w = headR * 1.7, px = -uy, py = ux;
+
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  let grad = g.createLinearGradient(pos.x, pos.y, tipx, tipy);
+  grad.addColorStop(0,   'rgba(191,230,255,0.69)');
+  grad.addColorStop(0.5, 'rgba(124,192,255,0.25)');
+  grad.addColorStop(1,   'rgba(124,192,255,0)');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.moveTo(pos.x + px * w, pos.y + py * w);
+  g.lineTo(tipx, tipy);
+  g.lineTo(pos.x - px * w, pos.y - py * w);
+  g.closePath(); g.fill();
+
+  grad = g.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, headR * 4);
+  grad.addColorStop(0, 'rgba(207,236,255,0.75)');
+  grad.addColorStop(1, 'rgba(207,236,255,0)');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(pos.x, pos.y, headR * 4, 0, Math.PI * 2); g.fill();
+  g.restore();
+
+  g.fillStyle = 'rgba(234,246,255,1)';
+  g.beginPath(); g.arc(pos.x, pos.y, headR, 0, Math.PI * 2); g.fill();
+
+  solarBodyCache.push({ name: SOLAR_COMET.name, fact: SOLAR_COMET.fact, x: pos.x, y: pos.y, r: Math.max(headR, 5 * solarDpr), depth: pos.depth });
+}
+
+function drawSolarLabel(g, pos, s, name) {
+  const k = solarDpr;
+  g.font = `${12 * k}px "Segoe UI", sans-serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'alphabetic';
+  const y = pos.y - s - 6 * k;
+  g.fillStyle = 'rgba(0,0,0,0.7)';
+  g.fillText(name, pos.x + k, y + k);
+  g.fillStyle = 'rgba(234,240,251,0.9)';
+  g.fillText(name, pos.x, y);
+  g.textAlign = 'left';
+}
+
+function drawSolarBodies(g, cx, cy, cam, maxR, nowPerf) {
+  const effMs = solarEffectiveMs();
+  const lapseOn = Settings.get('solarLapse');
+  const sunR = maxR * 0.12;
+  const showMoons = Settings.get('solarMoons');
+  const showLabels = Settings.get('solarLabels');
+  const trailsOn = Settings.get('trails') && !effectiveReduceMotion();
+
+  const items = SOLAR_PLANETS.map(p => {
+    const theta = solarPlanetAngle(p, effMs);
+    const orbitPx = solarOrbitFrac(p.a) * maxR;
+    const pos = projectCore(cx, cy, cam, orbitPx, solarScreenAngle(theta));
+    const s = p.size * solarDpr * cam.zoom;
+    return { p, theta, orbitPx, pos, s, depth: pos.depth };
+  });
+  const order = items.map((_, i) => i);
+  for (let i = 1; i < items.length; i++) { // insertion sort: far/back first
+    const k = order[i], dk = items[k].depth; let j = i - 1;
+    while (j >= 0 && items[order[j]].depth > dk) { order[j + 1] = order[j]; j--; }
+    order[j + 1] = k;
+  }
+
+  let sunDrawn = false;
+  for (let idx = 0; idx < items.length; idx++) {
+    const item = items[order[idx]];
+    if (!sunDrawn && item.depth >= 0) { drawSolarSun(g, cx, cy, sunR, nowPerf); sunDrawn = true; }
+
+    if (trailsOn) drawSolarPlanetTrail(g, cx, cy, cam, item);
+    if (item.p.ring) drawSolarRing(g, item.pos, item.s, item.p.color, false);
+    if (showMoons && item.p.moons.length) {
+      drawSolarMoonOrbits(g, cam, item.pos, item.p);
+      drawSolarMoonBodies(g, cam, item.pos, item.depth, item.p, effMs, lapseOn, cx, cy, true);
+    }
+
+    g.fillStyle = item.p.color;
+    g.beginPath(); g.arc(item.pos.x, item.pos.y, item.s, 0, Math.PI * 2); g.fill();
+    const ldx = cx - item.pos.x, ldy = cy - item.pos.y;
+    const llen = Math.hypot(ldx, ldy) || 1;
+    shadeSphereDirectional(g, item.pos.x, item.pos.y, item.s, ldx / llen, ldy / llen);
+
+    if (item.p.ring) drawSolarRing(g, item.pos, item.s, item.p.color, true);
+    if (showMoons && item.p.moons.length) {
+      drawSolarMoonBodies(g, cam, item.pos, item.depth, item.p, effMs, lapseOn, cx, cy, false);
+    }
+    if (showLabels) drawSolarLabel(g, item.pos, item.s, item.p.name);
+
+    solarBodyCache.push({ name: item.p.name, fact: item.p.fact, x: item.pos.x, y: item.pos.y, r: Math.max(item.s, 5 * solarDpr), depth: item.depth });
+  }
+  if (!sunDrawn) drawSolarSun(g, cx, cy, sunR, nowPerf);
+}
+
+// ── Hover: hit-test against the per-frame body cache ────────────────────────
+function solarTryPick() {
+  if (!Settings.get('tooltips')) return null;
+  const pad = 4 * solarDpr;
+  let best = -Infinity, hit = null;
+  for (const b of solarBodyCache) {
+    const pr = b.r + pad;
+    const dx = b.x - SolarPointer.x, dy = b.y - SolarPointer.y;
+    if (dx * dx + dy * dy <= pr * pr && b.depth > best) { hit = b; best = b.depth; }
+  }
+  return hit;
+}
+
+function wrapCanvasText(g, text, maxWidth) {
+  const lines = []; let cur = '';
+  for (const word of text.split(' ')) {
+    const trial = cur.length === 0 ? word : cur + ' ' + word;
+    if (cur.length > 0 && g.measureText(trial).width > maxWidth) { lines.push(cur); cur = word; }
+    else cur = trial;
+  }
+  if (cur.length > 0) lines.push(cur);
+  return lines;
+}
+
+function traceRoundRect(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+
+function drawSolarTooltip(g, hover) {
+  const k = solarDpr; // all sizes device-px (no dpr transform on the canvas)
+  const titleFont = `700 ${14 * k}px "Segoe UI", sans-serif`;
+  const bodyFont = `${12 * k}px "Segoe UI", sans-serif`;
+  const maxW = 240 * k;
+  const W = solarCanvas.width, H = solarCanvas.height;
+
+  g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+  g.font = bodyFont;
+  const lines = wrapCanvasText(g, hover.fact, maxW);
+  g.font = titleFont;
+  let contentW = g.measureText(hover.name).width;
+  g.font = bodyFont;
+  for (const ln of lines) contentW = Math.max(contentW, g.measureText(ln).width);
+  const boxW = Math.min(maxW + 20 * k, contentW + 20 * k);
+  const lineH = 16 * k;
+  const boxH = 14 * k + 18 * k + lines.length * lineH + 6 * k;
+
+  let bx = hover.x + hover.r + 12 * k;
+  let by = hover.y - boxH / 2;
+  if (bx + boxW > W - 8 * k) bx = hover.x - hover.r - 12 * k - boxW;
+  bx = Math.max(8 * k, Math.min(bx, Math.max(8 * k, W - boxW - 8 * k)));
+  by = Math.max(8 * k, Math.min(by, Math.max(8 * k, H - boxH - 8 * k)));
+
+  traceRoundRect(g, bx, by, boxW, boxH, 8 * k);
+  g.fillStyle = 'rgba(12,18,32,0.93)'; g.fill();
+  g.strokeStyle = 'rgba(58,77,110,1)'; g.lineWidth = k; g.stroke();
+
+  const tx = bx + 10 * k; let ty = by + 20 * k;
+  g.fillStyle = '#fff'; g.font = titleFont;
+  g.fillText(hover.name, tx, ty);
+  ty += 20 * k;
+  g.font = bodyFont; g.fillStyle = 'rgba(199,210,230,1)';
+  for (const ln of lines) { g.fillText(ln, tx, ty); ty += lineH; }
+}
+
+function drawSolarHoverOverlay(g) {
+  SolarPointer.hover = (SolarPointer.inside && !SolarPointer.dragging) ? solarTryPick() : null;
+  solarCanvas.classList.toggle('hovering', !!SolarPointer.hover && !SolarPointer.dragging);
+  if (!SolarPointer.hover) return;
+  const h = SolarPointer.hover;
+  g.strokeStyle = 'rgba(255,255,255,0.8)';
+  g.lineWidth = 1.5 * solarDpr;
+  g.beginPath(); g.arc(h.x, h.y, h.r + 5 * solarDpr, 0, Math.PI * 2); g.stroke();
+  drawSolarTooltip(g, h);
+}
+
+// ── Main draw ───────────────────────────────────────────────────────────────
+function drawSolar(now) {
+  solarDpr = sizeCanvas(solarCanvas);
+  const w = solarCanvas.width, h = solarCanvas.height;
+  solarCtx.clearRect(0, 0, w, h); // transparent — the shared page starfield shows through
+  if (w === 0 || h === 0) return;
+  advanceSolarLapse();
+
+  const cam = SolarCam;
+  const cx = w / 2 + cam.panX, cy = h / 2 + cam.panY;
+  const maxR = Math.min(w, h) * 0.44;
+  const effMs = solarEffectiveMs();
+  solarBodyCache = [];
+
+  drawSolarClockBackdrop(solarCtx, w, h);
+
+  if (Settings.get('solarOrbits')) {
+    for (const p of SOLAR_PLANETS) {
+      strokeOrbitRing(solarCtx, cx, cy, cam, solarOrbitFrac(p.a) * maxR, {
+        dashed: p.dwarf, lineWidth: solarDpr,
+        strokeStyle: p.dwarf ? 'rgba(51,68,102,0.29)' : 'rgba(51,68,102,0.4)',
+      });
+    }
+  }
+  if (Settings.get('solarBelt')) drawSolarBelt(solarCtx, cx, cy, cam, maxR, solarDaysSinceJ2000(effMs));
+  drawSolarBodies(solarCtx, cx, cy, cam, maxR, now);
+  drawSolarComet(solarCtx, cx, cy, cam, maxR, effMs);
+  drawSolarHoverOverlay(solarCtx);
+}
+
+function solarAnimActive() {
+  return isSolarViewActive() && !effectiveReduceMotion();
+}
+
+function refreshSolar() {
+  if (isSolarViewActive()) drawSolar(performance.now());
+  Renderer.ensureLoop();
+}
+
+function updateSolar() {
+  drawSolar(performance.now());
+}
+
+Renderer.register('solar', { when: solarAnimActive, draw: drawSolar });
+window.addEventListener('resize', () => { if (isSolarViewActive()) drawSolar(performance.now()); });
+
+// ── Pointer interaction: wheel zoom, drag pan, dblclick reset, hover ────────
+function solarPointerPos(e) {
+  const r = solarCanvas.getBoundingClientRect();
+  if (r.width === 0) return { x: 0, y: 0 };
+  return {
+    x: (e.clientX - r.left) * (solarCanvas.width / r.width),
+    y: (e.clientY - r.top) * (solarCanvas.height / r.height),
+  };
+}
+
+// Redraw for pointer feedback when the rAF loop isn't running (reduce-motion)
+function solarInteractionRedraw() {
+  if (isSolarViewActive() && !solarAnimActive()) drawSolar(performance.now());
+}
+
+solarCanvas.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  SolarPointer.dragging = true;
+  SolarPointer.dragLast = solarPointerPos(e);
+  solarCanvas.setPointerCapture(e.pointerId);
+  solarCanvas.classList.add('dragging');
+});
+solarCanvas.addEventListener('pointermove', e => {
+  const p = solarPointerPos(e);
+  SolarPointer.x = p.x; SolarPointer.y = p.y; SolarPointer.inside = true;
+  if (SolarPointer.dragging) {
+    SolarCam.panX += p.x - SolarPointer.dragLast.x;
+    SolarCam.panY += p.y - SolarPointer.dragLast.y;
+    SolarPointer.dragLast = p;
+  }
+  solarInteractionRedraw();
+});
+function solarEndDrag() {
+  SolarPointer.dragging = false;
+  solarCanvas.classList.remove('dragging');
+}
+solarCanvas.addEventListener('pointerup', solarEndDrag);
+solarCanvas.addEventListener('pointercancel', solarEndDrag);
+solarCanvas.addEventListener('pointerleave', () => {
+  SolarPointer.inside = false; SolarPointer.hover = null;
+  solarCanvas.classList.remove('hovering');
+  solarInteractionRedraw();
+});
+solarCanvas.addEventListener('wheel', e => {
+  e.preventDefault(); // scoped to the canvas — page scroll elsewhere unaffected
+  const p = solarPointerPos(e);
+  const baseX = solarCanvas.width / 2, baseY = solarCanvas.height / 2;
+  const cx = baseX + SolarCam.panX, cy = baseY + SolarCam.panY;
+  const z0 = SolarCam.zoom;
+  const z1 = Math.max(0.4, Math.min(12, z0 * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
+  const k = z1 / z0;
+  SolarCam.panX = (p.x - (p.x - cx) * k) - baseX;
+  SolarCam.panY = (p.y - (p.y - cy) * k) - baseY;
+  SolarCam.zoom = z1;
+  solarInteractionRedraw();
+}, { passive: false });
+solarCanvas.addEventListener('dblclick', () => {
+  SolarCam.zoom = 1; SolarCam.panX = 0; SolarCam.panY = 0;
+  solarInteractionRedraw();
+});
 
 // ── Main Tick ──
 function tick() {
+  checkCometTrigger();
   switch (activeView) {
     case 'flip':    updateFlip(); break;
     case 'analog':  updateAnalog(); break;
     case 'globe':   updateGlobe(); break;
     case 'map':     updateMap(); break;
     case 'horizon': updateHorizon(); break;
+    case 'orbit':   updateOrbit(); break;
+    case 'solar':   updateSolar(); break;
   }
+  refreshTimeHud();
 }
 tick();
 setInterval(tick, 1000);
