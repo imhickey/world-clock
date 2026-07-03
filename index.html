@@ -314,9 +314,12 @@ body.analog-trails-on .analog-second { display: none; }
   grid-template-columns: 1fr 1fr;
   gap: 1.2rem;
   margin-left: 3rem;
+  /* Above the moon canvas (z-index 4): the moon passes BEHIND the cards,
+     visible through their translucent background. */
+  position: relative; z-index: 5;
 }
 .globe-card {
-  background: rgba(22,33,62,0.8);
+  background: rgba(22,33,62,0.45);
   border: 1px solid #2d3a54;
   border-radius: 10px;
   padding: 0.8rem 1.2rem;
@@ -327,6 +330,10 @@ body.analog-trails-on .analog-second { display: none; }
   color: #f59e0b;
   font-family: 'Consolas','Courier New',monospace;
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.85);
+}
+.globe-card .location-label, .globe-card .date-info {
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
 
 /* ═══════════════════════════════════════
@@ -737,6 +744,21 @@ table.help-keys td.hk-key {
   color: #f59e0b; font-family: 'Consolas','Courier New',monospace;
   font-weight: 700; white-space: nowrap; min-width: 80px;
 }
+.help-tabs { display: flex; gap: 6px; margin: 2px 0 8px; }
+.help-tab {
+  background: transparent; border: 1px solid #334155; color: #94a3b8;
+  border-radius: 6px; padding: 4px 14px; font-size: 0.72rem;
+  letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
+}
+.help-tab.active { color: #f59e0b; border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.08); }
+.credits-row { display: grid; grid-template-columns: 110px 1fr; gap: 0 12px; margin: 8px 0; align-items: baseline; }
+.credits-row .cr-what {
+  font-weight: 600; color: #cbd5e1; font-size: 0.72rem;
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.credits-row .cr-detail { color: #8093ad; font-size: 0.76rem; line-height: 1.45; }
+.credits-row .cr-detail a { color: #7cc0ff; text-decoration: none; }
+.credits-row .cr-detail a:hover { text-decoration: underline; }
 
 /* ── FPS counter ── */
 #fps-counter {
@@ -929,11 +951,13 @@ const DEFAULTS = {
   tooltips: true, // generic key — Phase 7's DOM tooltips will reuse it
   timeControls: true,
   fps: false,
+  ecoMode: false, // ~30fps cap + lighter particle effects (energy saver)
   reduceMotion: null, // null = follow OS prefers-reduced-motion; true/false = force
 };
 // Boolean feature flags only — non-boolean settings (reduceMotion tristate,
 // solarLapseRate number) must not be clobbered by the ?fx=off/all overrides.
-const AMBIENCE_KEYS = Object.keys(DEFAULTS).filter(k => typeof DEFAULTS[k] === 'boolean' && k !== 'fps');
+// fps and ecoMode are meta/performance switches, not ambience effects.
+const AMBIENCE_KEYS = Object.keys(DEFAULTS).filter(k => typeof DEFAULTS[k] === 'boolean' && k !== 'fps' && k !== 'ecoMode');
 
 const Settings = (() => {
   let state = { ...DEFAULTS };
@@ -1021,8 +1045,16 @@ const Renderer = (() => {
     return false;
   }
 
+  let lastEcoDraw = 0;
   function loop(now) {
     if (document.hidden || !hasActiveConsumers()) { running = false; return; }
+    // Eco mode: draw at most ~30fps (skip frames on faster displays). rAF
+    // itself is nearly free; the savings come from halving the draw work.
+    if (Settings.get('ecoMode') && now - lastEcoDraw < 31) {
+      requestAnimationFrame(loop);
+      return;
+    }
+    lastEcoDraw = now;
     for (const c of consumers.values()) if (isActive(c)) c.draw(now);
     frames++;
     if (now - fpsWindowStart >= 500) {
@@ -1215,7 +1247,9 @@ let cometState = null;
 function buildStars() {
   const rand = mulberry32(7);
   const area = window.innerWidth * window.innerHeight;
-  const count = Math.min(250, Math.round(area / 4500));
+  const count = Settings.get('ecoMode')
+    ? Math.min(120, Math.round(area / 9000))
+    : Math.min(250, Math.round(area / 4500));
   stars = [];
   for (let i = 0; i < count; i++) {
     stars.push({
@@ -1968,17 +2002,44 @@ function buildHelpContent() {
   const keyRows = KEY_BINDINGS.map(b =>
     `<tr><td class="hk-key">${b.keys}</td><td>${b.desc}</td></tr>`
   ).join('');
+  const credit = (what, detail) =>
+    `<div class="credits-row"><span class="cr-what">${what}</span><span class="cr-detail">${detail}</span></div>`;
+  const link = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
   body.innerHTML = `
-    <p>A world clock with seven visualizations across six timezones, borrowing
-    canvas techniques from the SkiaSharp solar-system demo. Hover any city for
-    an info card; scrub time to see the whole page follow.</p>
-    <h3>Views (keys 1–7)</h3>
-    ${viewRows}
-    <h3>Keyboard</h3>
-    <table class="help-keys">${keyRows}</table>
-    <p class="hv-desc">Every effect can be toggled in ⚙️ Settings ·
-    Earth-at-night imagery: NASA / NOAA NGDC (public domain)</p>
+    <div class="help-tabs" role="tablist">
+      <button class="help-tab active" data-pane="guide" role="tab">Help</button>
+      <button class="help-tab" data-pane="credits" role="tab">Credits</button>
+    </div>
+    <div class="help-pane" data-pane="guide">
+      <p>A world clock with seven visualizations across six timezones, borrowing
+      canvas techniques from the SkiaSharp solar-system demo. Hover any city for
+      an info card; scrub time to see the whole page follow.</p>
+      <h3>Views (keys 1–7)</h3>
+      ${viewRows}
+      <h3>Keyboard</h3>
+      <table class="help-keys">${keyRows}</table>
+      <p class="hv-desc">Every effect can be toggled in ⚙️ Settings</p>
+    </div>
+    <div class="help-pane" data-pane="credits" style="display:none">
+      <p>Everything on this page is hand-rolled vanilla code, but it stands on
+      freely shared imagery, data, and formulas. Credit where credit is due:</p>
+      ${credit('Imagery', `“Earth at Night” — NASA Earth Observatory / NOAA NGDC (${link('https://commons.wikimedia.org/wiki/File:The_earth_at_night.jpg', 'public domain')})`)}
+      ${credit('Planets', `JPL / E.M. Standish, ${link('https://ssd.jpl.nasa.gov/planets/approx_pos.html', 'Approximate Positions of the Planets')} — Keplerian mean elements (J2000, valid 1800–2050)`)}
+      ${credit('Sunrise · sunset', `Simplified ${link('https://gml.noaa.gov/grad/solcalc/', 'NOAA Solar Calculator')} formulas — solar declination + equation of time`)}
+      ${credit('Sun · moon', 'Low-precision mean ecliptic longitudes and Greenwich sidereal time, after the Astronomical Almanac / USNO approximations')}
+      ${credit('Inspiration', `Canvas techniques ported from the author's ${link('https://github.com/mono/SkiaSharp', 'SkiaSharp')} solar-system demo (SkiaSharp: MIT)`)}
+      ${credit('Runtime', 'Vanilla HTML, CSS and JavaScript on Canvas 2D — zero libraries, zero build step; system fonts (Segoe UI, Consolas) and native emoji')}
+      ${credit('Testing', `${link('https://playwright.dev', 'Playwright')} end-to-end suites, development-time only — nothing ships to this page`)}
+      ${credit('Author', `Ian Hickey · ${link('https://github.com/imhickey/world-clock', 'github.com/imhickey/world-clock')} · MIT license`)}
+    </div>
   `;
+  const tabs = body.querySelectorAll('.help-tab');
+  tabs.forEach(btn => btn.addEventListener('click', () => {
+    tabs.forEach(b => b.classList.toggle('active', b === btn));
+    body.querySelectorAll('.help-pane').forEach(p => {
+      p.style.display = p.dataset.pane === btn.dataset.pane ? '' : 'none';
+    });
+  }));
 }
 
 // Decorative live banner: a tiny orbital system using the shared trail helper
@@ -2137,6 +2198,7 @@ const SETTINGS_SCHEMA = [
     { key: 'timeControls', label: 'Time-travel controls', type: 'bool', onChange: onTimeControlsToggle },
   ]},
   { group: 'Performance', items: [
+    { key: 'ecoMode', label: 'Eco mode: ~30fps + lighter effects', type: 'bool', onChange: () => { refreshBackground(); refreshSky(); refreshSolar(); } },
     { key: 'fps', label: 'Show FPS counter', type: 'bool', onChange: applyFpsState },
   ]},
 ];
@@ -3030,11 +3092,13 @@ function drawSkyPanel(panel, perfNow) {
   g.fillStyle = skyRgb(pal.horizon);
   g.fillRect(0, geo.horizonY, w, h - geo.horizonY);
 
-  // Stars, fading in through dusk
+  // Stars, fading in through dusk (eco mode draws every other star)
   if (Settings.get('skyStars') && twilight > 0) {
     const twinkling = skyAnimActive();
     const t = perfNow / 1000;
-    for (const s of panel.stars) {
+    const step = Settings.get('ecoMode') ? 2 : 1;
+    for (let i = 0; i < panel.stars.length; i += step) {
+      const s = panel.stars[i];
       const a = twilight * s.base * (twinkling ? 0.55 + 0.45 * Math.sin(t * 1.6 + s.phase) : 1);
       if (a <= 0.02) continue;
       g.fillStyle = `rgba(226,232,240,${a.toFixed(3)})`;
@@ -3327,20 +3391,20 @@ function drawSolarClockBackdrop(g, w, h) {
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
   g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.font = `700 ${Math.round(h * 0.42)}px Consolas, 'Courier New', monospace`;
-  g.fillStyle = 'rgba(226,232,240,0.055)';
+  g.font = `700 ${Math.round(h * 0.52)}px Consolas, 'Courier New', monospace`;
+  g.fillStyle = 'rgba(226,232,240,0.095)';
   g.fillText(`${hh}:${mm}`, w / 2, h * 0.46);
-  g.font = `${Math.round(h * 0.042)}px Consolas, 'Courier New', monospace`;
-  g.fillStyle = 'rgba(226,232,240,0.07)';
-  g.fillText(now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), w / 2, h * 0.73);
+  g.font = `${Math.round(h * 0.05)}px Consolas, 'Courier New', monospace`;
+  g.fillStyle = 'rgba(226,232,240,0.12)';
+  g.fillText(now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), w / 2, h * 0.74);
   if (Settings.get('solarLapse')) {
     const sim = new Date(solarEffectiveMs());
     const rate = SOLAR_LAPSE_RATES.find(r => r.value === solarLapseDaysPerSec());
     const rateStr = rate ? ` · ${rate.label}` : '';
     const simStr = `SIM ${sim.getFullYear()}-${String(sim.getMonth() + 1).padStart(2, '0')}-${String(sim.getDate()).padStart(2, '0')}${rateStr}`;
-    g.font = `${Math.round(h * 0.032)}px Consolas, 'Courier New', monospace`;
-    g.fillStyle = 'rgba(245,158,11,0.10)';
-    g.fillText(simStr, w / 2, h * 0.73 + h * 0.055);
+    g.font = `${Math.round(h * 0.037)}px Consolas, 'Courier New', monospace`;
+    g.fillStyle = 'rgba(245,158,11,0.15)';
+    g.fillText(simStr, w / 2, h * 0.74 + h * 0.06);
   }
   g.textAlign = 'left'; g.textBaseline = 'alphabetic';
 }
@@ -3368,7 +3432,9 @@ function drawSolarSun(g, cx, cy, r, now) {
 
 function drawSolarBelt(g, cx, cy, cam, maxR, effDays) {
   const rand = mulberry32(99);
-  const count = Math.min(260, Math.round((solarCanvas.width * solarCanvas.height) / 12000));
+  const count = Settings.get('ecoMode')
+    ? Math.min(130, Math.round((solarCanvas.width * solarCanvas.height) / 24000))
+    : Math.min(260, Math.round((solarCanvas.width * solarCanvas.height) / 12000));
   const rot = effDays * 2 * Math.PI / 1682; // whole belt rotates at a Ceres-ish period
   for (let i = 0; i < count; i++) {
     const baseAng = rand() * Math.PI * 2;
@@ -3449,6 +3515,19 @@ function drawSolarComet(g, cx, cy, cam, maxR, effMs) {
   const headR = 2.6 * scale;
   const tipx = pos.x + ux * tailLen, tipy = pos.y + uy * tailLen;
   const w = headR * 1.7, px = -uy, py = ux;
+
+  // Motion trail along the actual elliptical path behind the head (radius
+  // recomputed per sample — the orbit is eccentric, unlike the planets').
+  // Distinct from the gas tail below, which correctly points anti-sunward.
+  if (Settings.get('trails') && !effectiveReduceMotion()) {
+    const pts = [];
+    for (let i = 0; i < SOLAR_TRAIL_SAMPLES; i++) {
+      const thPast = theta - solarMotionSign * (1 - i / (SOLAR_TRAIL_SAMPLES - 1)) * 0.5;
+      const rf = (1 - SOLAR_COMET.E * SOLAR_COMET.E) / (1 + SOLAR_COMET.E * Math.cos(thPast));
+      pts.push(projectCore(cx, cy, cam, SOLAR_COMET.A * rf * maxR, solarScreenAngle(thPast)));
+    }
+    drawTaperedTrail(g, pts, '#7cc0ff', headR * 1.4, 0.35);
+  }
 
   g.save();
   g.globalCompositeOperation = 'lighter';
