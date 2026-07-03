@@ -3513,9 +3513,6 @@ function drawSolarComet(g, cx, cy, cam, maxR, effMs) {
   const near = Math.max(0, Math.min(1, ((1 + SOLAR_COMET.E) - rFrac) / (2 * SOLAR_COMET.E)));
   const tailLen = (24 + 78 * near) * scale;
   const headR = 2.6 * scale;
-  const tipx = pos.x + ux * tailLen, tipy = pos.y + uy * tailLen;
-  const w = headR * 1.7, px = -uy, py = ux;
-
   // Motion trail along the actual elliptical path behind the head (radius
   // recomputed per sample — the orbit is eccentric, unlike the planets').
   // Distinct from the gas tail below, which correctly points anti-sunward.
@@ -3531,21 +3528,29 @@ function drawSolarComet(g, cx, cy, cam, maxR, effMs) {
 
   g.save();
   g.globalCompositeOperation = 'lighter';
-  let grad = g.createLinearGradient(pos.x, pos.y, tipx, tipy);
-  grad.addColorStop(0,   'rgba(191,230,255,0.69)');
-  grad.addColorStop(0.5, 'rgba(124,192,255,0.25)');
-  grad.addColorStop(1,   'rgba(124,192,255,0)');
-  g.fillStyle = grad;
-  g.beginPath();
-  g.moveTo(pos.x + px * w, pos.y + py * w);
-  g.lineTo(tipx, tipy);
-  g.lineTo(pos.x - px * w, pos.y - py * w);
-  g.closePath(); g.fill();
+  // Soft ion tail: additive radial puffs marching anti-sunward — slim and
+  // bright at the head, flaring out and fading toward the tip. A diffuse
+  // plume reads as a real tail; the old flat triangle looked like a hard wedge.
+  const puffs = Settings.get('ecoMode') ? 18 : 32;
+  const spacing = tailLen / puffs;
+  for (let i = 0; i <= puffs; i++) {
+    const f = i / puffs;
+    const bx = pos.x + ux * tailLen * f, by = pos.y + uy * tailLen * f;
+    // radius never drops below the puff spacing, so the plume stays a
+    // continuous soft column even where the flare term is small.
+    const rad = Math.max(headR * (1.2 + 2.0 * f), spacing * 0.75);
+    const a = 0.42 * (1 - f) * (1 - f);
+    const pg = g.createRadialGradient(bx, by, 0, bx, by, rad);
+    pg.addColorStop(0, `rgba(150,200,255,${a.toFixed(3)})`);
+    pg.addColorStop(1, 'rgba(124,192,255,0)');
+    g.fillStyle = pg;
+    g.beginPath(); g.arc(bx, by, rad, 0, Math.PI * 2); g.fill();
+  }
 
-  grad = g.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, headR * 4);
-  grad.addColorStop(0, 'rgba(207,236,255,0.75)');
-  grad.addColorStop(1, 'rgba(207,236,255,0)');
-  g.fillStyle = grad;
+  const coma = g.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, headR * 4);
+  coma.addColorStop(0, 'rgba(207,236,255,0.75)');
+  coma.addColorStop(1, 'rgba(207,236,255,0)');
+  g.fillStyle = coma;
   g.beginPath(); g.arc(pos.x, pos.y, headR * 4, 0, Math.PI * 2); g.fill();
   g.restore();
 
