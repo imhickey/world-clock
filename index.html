@@ -3390,10 +3390,17 @@ function drawSolarClockBackdrop(g, w, h) {
   const now = Clock.now();
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
-  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.textAlign = 'center';
   g.font = `700 ${Math.round(h * 0.52)}px Consolas, 'Courier New', monospace`;
   g.fillStyle = 'rgba(226,232,240,0.095)';
-  g.fillText(`${hh}:${mm}`, w / 2, h * 0.46);
+  // Anchor the ':' exactly on the Sun (canvas centre). The colon is the middle
+  // glyph of the 5-char monospace "HH:MM", so it already sits at w/2; offset
+  // the baseline by the colon's measured ink centre so it lands on h/2 too.
+  g.textBaseline = 'alphabetic';
+  const cm = g.measureText(':');
+  const colonAbove = ((cm.actualBoundingBoxAscent || h * 0.26) - (cm.actualBoundingBoxDescent || 0)) / 2;
+  g.fillText(`${hh}:${mm}`, w / 2, h / 2 + colonAbove);
+  g.textBaseline = 'middle';
   g.font = `${Math.round(h * 0.05)}px Consolas, 'Courier New', monospace`;
   g.fillStyle = 'rgba(226,232,240,0.12)';
   g.fillText(now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), w / 2, h * 0.74);
