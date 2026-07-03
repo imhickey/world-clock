@@ -10,7 +10,9 @@ A beautiful, responsive world clock with seven visualizations:
   sub-solar position, seasonal bow), sun & moon markers at the points where
   they are overhead, and cursor-anchored wheel-zoom / drag-pan
 - **Horizon Strip** — 24-hour daylight bar with a glowing sun and moons
-- **Orbit** — cities orbit Earth as planets, positioned by their local solar time
+- **Sky** — six live sky panels, one per city: the real sun and moon paths
+  across today, sky color driven by actual solar altitude (dawn, day, golden
+  hour, dusk, night), and stars that fade in after sunset
 - **Solar System** — the real thing: planets at their true astronomical
   positions today (J2000 orbital elements), real moon periods (Triton runs
   retrograde), asteroid belt, comet, adjustable time-lapse, a faded background

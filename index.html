@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>World Clock</title>
-<meta name="description" content="Beautiful responsive world clock with Flip, Analog, Globe, Map, Horizon, Orbit and Solar System views across 6 timezones.">
+<meta name="description" content="Beautiful responsive world clock with Flip, Analog, Globe, Map, Horizon, Sky and Solar System views across 6 timezones.">
 <meta property="og:title" content="World Clock">
-<meta property="og:description" content="Beautiful responsive world clock with 7 visualizations across 6 timezones, including a real-time solar system.">
+<meta property="og:description" content="Beautiful responsive world clock with 7 visualizations across 6 timezones, including six live sun/moon skies and a real-time solar system.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://imhickey.github.io/world-clock/">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
@@ -477,7 +477,7 @@ body.analog-trails-on .analog-second { display: none; }
 .horizon-marker .tag .location-label { font-size: 0.6rem; }
 
 /* ═══════════════════════════════════════
-   VIEW 6: ORBIT
+   VIEW 6: SKY (six live sun/moon sky panels)
    ═══════════════════════════════════════ */
 .orbit-container {
   position: relative;
@@ -488,9 +488,65 @@ body.analog-trails-on .analog-second { display: none; }
   border-radius: 10px;
   overflow: hidden;
 }
-#orbit-canvas {
+.sky-grid {
+  width: 95vw;
+  height: calc(100vh - 160px);
+  max-height: 800px;
+  min-height: 420px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 0.9rem;
+}
+.sky-panel {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+}
+.sky-canvas {
   position: absolute; inset: 0; width: 100%; height: 100%;
   display: block;
+}
+.sky-header {
+  position: absolute; top: 0; left: 0; right: 0;
+  padding: 8px 10px;
+  pointer-events: none;
+  z-index: 2;
+}
+.sky-header .location-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #e2e8f0;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+.sky-header .time-display {
+  font-size: clamp(1.1rem, 1.6vw, 1.5rem); font-weight: 700;
+  color: #f59e0b;
+  font-family: 'Consolas','Courier New',monospace;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 8px rgba(245,158,11,0.5), 0 1px 4px rgba(0,0,0,0.8);
+}
+.sky-header .sun-times {
+  font-size: 0.58rem;
+  color: #cbd5e1;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+.sky-header .date-info {
+  font-size: 0.56rem;
+  color: #94a3b8;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+@media (max-width: 900px) {
+  .sky-grid { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(3, 1fr); }
+}
+@media (max-width: 520px) {
+  .sky-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(6, minmax(130px, 1fr));
+    height: auto; max-height: none; min-height: 0;
+  }
 }
 
 /* ═══════════════════════════════════════
@@ -777,11 +833,9 @@ table.help-keys td.hk-key {
   </div>
 </div>
 
-<!-- View 6: Orbit -->
-<div id="view-orbit" class="view">
-  <div class="orbit-container" id="orbit-container">
-    <canvas id="orbit-canvas"></canvas>
-  </div>
+<!-- View 6: Sky -->
+<div id="view-sky" class="view">
+  <div class="sky-grid" id="sky-grid"></div>
 </div>
 
 <!-- View 7: Solar System -->
@@ -803,7 +857,7 @@ table.help-keys td.hk-key {
   <button data-view="globe">🌍 Globe</button>
   <button data-view="map">🗺️ Map</button>
   <button data-view="horizon">📊 Horizon</button>
-  <button data-view="orbit">🪐 Orbit</button>
+  <button data-view="sky">🌅 Sky</button>
   <button data-view="solar">☀️ Solar</button>
   <span class="switcher-sep"></span>
   <button id="sec-toggle">⏱️ Seconds</button>
@@ -860,8 +914,8 @@ const DEFAULTS = {
   atmosphere: true,
   horizonGlow: true,
   trails: true,
-  orbitRings: true,
-  orbitLabels: true,
+  skyArcs: true,
+  skyStars: true,
   solarLapse: true,
   solarLapseRate: 2, // sim-days per real second under time-lapse
   solarClock: true,
@@ -1062,8 +1116,13 @@ function hashStringToSeed(str) {
 }
 
 // ═══════════════════════════════════════
-// SHARED CANVAS HELPERS
+// SHARED CANVAS & TIME HELPERS
 // ═══════════════════════════════════════
+function hexToRgba(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha.toFixed(3)})`;
+}
+
 // Smooth comet-tail trail: pts ordered oldest→newest, in DEVICE pixels.
 // Stroked segment-by-segment with quadratic alpha falloff toward the tail
 // and linear width taper, round caps. Callers resample pts analytically from
@@ -1083,6 +1142,67 @@ function drawTaperedTrail(g, pts, hexColor, headWidth, maxAlpha = 0.5) {
     g.lineTo(pts[i].x, pts[i].y);
     g.stroke();
   }
+}
+
+// Ports Skai-demo's projectCore: a top-down orbital position tilted into a
+// pseudo-3D view. angle 0 = +X, depth > 0 = nearer the viewer (drawn in
+// front), depth < 0 = farther (drawn behind).
+function projectCore(cx, cy, cam, orbitPx, angle) {
+  const wx = orbitPx * Math.cos(angle);
+  const wz = orbitPx * Math.sin(angle);
+  return { x: cx + wx * cam.zoom, y: cy + wz * cam.zoom * cam.tiltY, depth: wz };
+}
+
+// Ports Skai-demo's shadeSphere, parameterized by an explicit light direction.
+function shadeSphereDirectional(g, x, y, radius, lightDx, lightDy) {
+  if (radius < 1.2) return;
+  const litx = x + lightDx * radius, lity = y + lightDy * radius;
+  const darkx = x - lightDx * radius, darky = y - lightDy * radius;
+  let grad = g.createLinearGradient(litx, lity, darkx, darky);
+  grad.addColorStop(0,    'rgba(0,0,0,0)');
+  grad.addColorStop(0.45, 'rgba(0,0,0,0)');
+  grad.addColorStop(1,    'rgba(0,0,0,0.86)');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(x, y, radius, 0, Math.PI * 2); g.fill();
+
+  const hix = x + lightDx * radius * 0.45, hiy = y + lightDy * radius * 0.45;
+  grad = g.createRadialGradient(hix, hiy, 0, hix, hiy, radius * 1.2);
+  grad.addColorStop(0, 'rgba(255,255,255,0.22)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(x, y, radius, 0, Math.PI * 2); g.fill();
+}
+
+function strokeOrbitRing(g, cx, cy, cam, orbitPx, opts = {}) {
+  const { dashed = false, strokeStyle = 'rgba(51,68,102,0.4)', lineWidth = 1 } = opts;
+  const seg = 96;
+  g.beginPath();
+  for (let i = 0; i <= seg; i++) {
+    const p = projectCore(cx, cy, cam, orbitPx, (i / seg) * Math.PI * 2);
+    if (i === 0) g.moveTo(p.x, p.y); else g.lineTo(p.x, p.y);
+  }
+  g.lineWidth = lineWidth;
+  if (dashed) g.setLineDash([4 * lineWidth, 5 * lineWidth]);
+  g.strokeStyle = strokeStyle;
+  g.stroke();
+  if (dashed) g.setLineDash([]);
+}
+
+// Minutes east of UTC for `tz` at the given instant (handles DST correctly,
+// since it reads the zone's actual current wall-clock offset rather than a
+// static lookup table).
+function utcOffsetMinutes(tz, at) {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour12: false,
+    year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric',
+  });
+  const p = fmt.formatToParts(at);
+  const get = (t) => parseInt(p.find(x => x.type === t).value, 10);
+  const asUTC = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'));
+  // Round: the formatted wall-clock is truncated to the minute while
+  // at.getTime() carries seconds — the raw quotient is fractional, which
+  // leaks into tooltip text ("UTC-7:0.52…") if not rounded.
+  return Math.round((asUTC - at.getTime()) / 60000);
 }
 
 const bgCanvas = document.getElementById('bg-canvas');
@@ -1699,7 +1819,7 @@ refreshTimeHud();
 // ZONE INFO TOOLTIPS (hover/focus/tap cards on every view)
 // ═══════════════════════════════════════
 const wcTooltipEl = document.getElementById('wc-tooltip');
-let wcTooltipTarget = null; // element (or 'orbit') currently showing a tooltip
+let wcTooltipTarget = null; // element currently showing a tooltip
 
 // Approximate sunrise/sunset (NOAA simplified + equation of time; ±few min).
 // Returns UTC ms for the given location on the UTC day containing atMs, or a
@@ -1836,7 +1956,7 @@ const VIEWS_META = [
   { emoji: '🌍', name: 'Globe',   desc: 'Night-lights Earth with a real day/night terminator and the moon at its true position' },
   { emoji: '🗺️', name: 'Map',    desc: 'NASA night map with a live day/night terminator and sun/moon markers — scroll to zoom, drag to pan' },
   { emoji: '📊', name: 'Horizon', desc: 'All six cities on one 24-hour daylight strip' },
-  { emoji: '🪐', name: 'Orbit',   desc: 'Cities orbit Earth at their local solar time' },
+  { emoji: '🌅', name: 'Sky',     desc: 'Six live skies — real sun and moon paths, dawn to dusk' },
   { emoji: '☀️', name: 'Solar',   desc: 'The real solar system — planets at their true positions today, with time-lapse' },
 ];
 
@@ -1990,7 +2110,7 @@ const SETTINGS_SCHEMA = [
     { key: 'starfield', label: 'Starfield background', type: 'bool', onChange: refreshBackground },
     { key: 'twinkle', label: 'Star twinkle', type: 'bool', onChange: refreshBackground },
     { key: 'comet', label: 'Hourly shooting star', type: 'bool', onChange: refreshBackground },
-    { key: 'reduceMotion', label: 'Reduce motion', type: 'tristate', onChange: () => { refreshBackground(); refreshGlobeShading(); refreshHorizonGlow(); refreshAnalogTrails(); refreshOrbit(); refreshSolar(); } },
+    { key: 'reduceMotion', label: 'Reduce motion', type: 'tristate', onChange: () => { refreshBackground(); refreshGlobeShading(); refreshHorizonGlow(); refreshAnalogTrails(); refreshSky(); refreshSolar(); } },
   ]},
   { group: 'Views', items: [
     { key: 'globeShading', label: 'Globe: 3D shading', type: 'bool', onChange: refreshGlobeShading },
@@ -1999,9 +2119,9 @@ const SETTINGS_SCHEMA = [
     { key: 'mapTerminator', label: 'Map: day/night shading', type: 'bool', onChange: refreshMap },
     { key: 'mapSunMoon', label: 'Map: sun & moon markers', type: 'bool', onChange: refreshMap },
     { key: 'horizonGlow', label: 'Horizon: sun & moon glow', type: 'bool', onChange: refreshHorizonGlow },
-    { key: 'trails', label: 'Motion trails', type: 'bool', onChange: () => { refreshAnalogTrails(); refreshOrbit(); refreshSolar(); } },
-    { key: 'orbitRings', label: 'Orbit: guide rings', type: 'bool', onChange: refreshOrbit },
-    { key: 'orbitLabels', label: 'Orbit: city labels', type: 'bool', onChange: refreshOrbit },
+    { key: 'trails', label: 'Motion trails', type: 'bool', onChange: () => { refreshAnalogTrails(); refreshSolar(); } },
+    { key: 'skyArcs', label: 'Sky: sun & moon paths', type: 'bool', onChange: refreshSky },
+    { key: 'skyStars', label: 'Sky: night stars', type: 'bool', onChange: refreshSky },
   ]},
   { group: 'Solar System', items: [
     { key: 'solarLapse', label: 'Time-lapse motion', type: 'bool', onChange: () => { solarLapseMs = 0; refreshSolar(); } },
@@ -2204,7 +2324,7 @@ buttons.forEach(b => {
 const KEY_BINDINGS = [
   { keys: '1 – 7', desc: 'Switch view',
     match: e => e.key >= '1' && e.key <= '7',
-    run: e => switchView(['flip','analog','globe','map','horizon','orbit','solar'][e.key - 1]) },
+    run: e => switchView(['flip','analog','globe','map','horizon','sky','solar'][e.key - 1]) },
   { keys: 'Space', desc: 'Pause / resume time', guardTyping: true, prevent: true,
     match: e => e.key === ' ', run: () => togglePause() },
   { keys: '+ / −', desc: 'Speed up / slow down time (0.1×–512×)',
@@ -2747,278 +2867,300 @@ function updateHorizon() {
 }
 
 // ═══════════════════════════════════════
-// VIEW 6: ORBIT (cities as planets around Earth)
+// VIEW 6: SKY (six live sun/moon sky panels)
 // ═══════════════════════════════════════
-const orbitCanvas = document.getElementById('orbit-canvas');
-const orbitCtx = orbitCanvas.getContext('2d');
-let orbitDpr = 1;
-
-const ORBIT_INNER_FRAC = 0.30;
-const ORBIT_OUTER_FRAC = 0.92;
-// Decorative angular span, not a real time window: at the true angular
-// velocity (one lap per 24h) any real-time tail is sub-pixel. 0.35 rad
-// represents the last ~80 minutes of local time.
-const ORBIT_TRAIL_SPAN = 0.35;
-const ORBIT_TRAIL_SAMPLES = 24;
-
-function isOrbitViewActive() {
-  const el = document.getElementById('view-orbit');
-  return !!el && el.classList.contains('active');
+// Real altitude of a body (given its geographic sub-point) as seen from a
+// city: sin(altitude) = sinφ·sinδ + cosφ·cosδ·cos(Δlon) — the same identity
+// the Map night mask uses, evaluated here per-city instead of per-pixel.
+function skyAltitudeDeg(zone, sub) {
+  const RAD = Math.PI / 180;
+  const phi = zone.lat * RAD;
+  const sinAlt = Math.sin(phi) * Math.sin(sub.lat * RAD)
+               + Math.cos(phi) * Math.cos(sub.lat * RAD) * Math.cos((zone.lon - sub.lon) * RAD);
+  return Math.asin(Math.max(-1, Math.min(1, sinAlt))) / RAD;
 }
 
-function hexToRgba(hex, alpha) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha.toFixed(3)})`;
+// Sky gradient keyframes keyed on the sun's current altitude (degrees),
+// highest-first; interpolated piecewise between the two bracketing stops.
+const SKY_KEYFRAMES = [
+  { alt: 90,  zenith: [15, 45, 92],  horizon: [120, 190, 226] },
+  { alt: 20,  zenith: [22, 58, 110], horizon: [151, 205, 232] },
+  { alt: 5,   zenith: [45, 68, 110], horizon: [247, 197, 126] },
+  { alt: 0,   zenith: [48, 52, 96],  horizon: [255, 138, 76]  },
+  { alt: -6,  zenith: [26, 28, 66],  horizon: [117, 60, 105]  },
+  { alt: -12, zenith: [13, 15, 40],  horizon: [43, 30, 74]    },
+  { alt: -18, zenith: [5, 7, 20],    horizon: [12, 16, 48]    },
+];
+function skyLerpColor(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }
-
-// Minutes east of UTC for `tz` at the given instant (handles DST correctly,
-// since it reads the zone's actual current wall-clock offset rather than a
-// static lookup table).
-function utcOffsetMinutes(tz, at) {
-  const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz, hour12: false,
-    year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric',
-  });
-  const p = fmt.formatToParts(at);
-  const get = (t) => parseInt(p.find(x => x.type === t).value, 10);
-  const asUTC = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'));
-  // Round: the formatted wall-clock is truncated to the minute while
-  // at.getTime() carries seconds — the raw quotient is fractional, which
-  // leaks into tooltip text ("UTC-7:0.52…") if not rounded.
-  return Math.round((asUTC - at.getTime()) / 60000);
-}
-
-// Orbit angle for a zone at a given instant. Noon local solar time -> angle 0
-// (sun-facing side, matching drawSunGlow's fixed position); midnight -> PI
-// (opposite side). Matches projectCore's convention: angle 0 = +X, depth 0.
-function orbitAngleAt(tz, at) {
-  const fmt = new Intl.DateTimeFormat('en-GB', {
-    timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  });
-  const p = fmt.formatToParts(at);
-  const h = parseInt(p.find(x => x.type === 'hour').value, 10);
-  const m = parseInt(p.find(x => x.type === 'minute').value, 10);
-  const s = parseInt(p.find(x => x.type === 'second').value, 10);
-  const hourFrac = h + m / 60 + s / 3600;
-  return ((hourFrac - 12) / 24) * Math.PI * 2;
-}
-
-// Ports Skai-demo's projectCore: a top-down orbital position tilted into a
-// pseudo-3D view. angle 0 = +X (toward the sun marker), depth > 0 = nearer
-// the viewer (drawn in front), depth < 0 = farther (drawn behind).
-function projectCore(cx, cy, cam, orbitPx, angle) {
-  const wx = orbitPx * Math.cos(angle);
-  const wz = orbitPx * Math.sin(angle);
-  return { x: cx + wx * cam.zoom, y: cy + wz * cam.zoom * cam.tiltY, depth: wz };
-}
-
-// Ports Skai-demo's shadeSphere, parameterized by an explicit light direction
-// instead of "toward canvas center" (Earth sits at center here, not the sun).
-function shadeSphereDirectional(g, x, y, radius, lightDx, lightDy) {
-  if (radius < 1.2) return;
-  const litx = x + lightDx * radius, lity = y + lightDy * radius;
-  const darkx = x - lightDx * radius, darky = y - lightDy * radius;
-  let grad = g.createLinearGradient(litx, lity, darkx, darky);
-  grad.addColorStop(0,    'rgba(0,0,0,0)');
-  grad.addColorStop(0.45, 'rgba(0,0,0,0)');
-  grad.addColorStop(1,    'rgba(0,0,0,0.86)');
-  g.fillStyle = grad;
-  g.beginPath(); g.arc(x, y, radius, 0, Math.PI * 2); g.fill();
-
-  const hix = x + lightDx * radius * 0.45, hiy = y + lightDy * radius * 0.45;
-  grad = g.createRadialGradient(hix, hiy, 0, hix, hiy, radius * 1.2);
-  grad.addColorStop(0, 'rgba(255,255,255,0.22)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grad;
-  g.beginPath(); g.arc(x, y, radius, 0, Math.PI * 2); g.fill();
-}
-
-function strokeOrbitRing(g, cx, cy, cam, orbitPx, opts = {}) {
-  const { dashed = false, strokeStyle = 'rgba(51,68,102,0.4)', lineWidth = 1 } = opts;
-  const seg = 96;
-  g.beginPath();
-  for (let i = 0; i <= seg; i++) {
-    const p = projectCore(cx, cy, cam, orbitPx, (i / seg) * Math.PI * 2);
-    if (i === 0) g.moveTo(p.x, p.y); else g.lineTo(p.x, p.y);
+function skyPalette(altDeg) {
+  const kf = SKY_KEYFRAMES;
+  if (altDeg >= kf[0].alt) return kf[0];
+  if (altDeg <= kf[kf.length - 1].alt) return kf[kf.length - 1];
+  for (let i = 0; i < kf.length - 1; i++) {
+    const hi = kf[i], lo = kf[i + 1];
+    if (altDeg <= hi.alt && altDeg >= lo.alt) {
+      const t = (hi.alt - altDeg) / (hi.alt - lo.alt);
+      return { zenith: skyLerpColor(hi.zenith, lo.zenith, t), horizon: skyLerpColor(hi.horizon, lo.horizon, t) };
+    }
   }
-  g.lineWidth = lineWidth;
-  if (dashed) g.setLineDash([4 * lineWidth, 5 * lineWidth]);
-  g.strokeStyle = strokeStyle;
-  g.stroke();
-  if (dashed) g.setLineDash([]);
+  return kf[0]; // unreachable
 }
+function skyRgb(c, a = 1) { return `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`; }
 
-function drawSunGlow(g, cx, cy, cam, maxR) {
-  const p = projectCore(cx, cy, cam, maxR * 1.05, 0); // "noon" direction, just past the outer ring
-  const r = maxR * 0.22;
-  g.save();
-  g.globalCompositeOperation = 'lighter';
-  const grad = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-  grad.addColorStop(0,   'rgba(255,220,130,0.55)');
-  grad.addColorStop(0.5, 'rgba(255,170,60,0.18)');
-  grad.addColorStop(1,   'rgba(255,120,30,0)');
-  g.fillStyle = grad;
-  g.beginPath(); g.arc(p.x, p.y, r, 0, Math.PI * 2); g.fill();
-  g.restore();
-}
-
-function drawEarth(g, cx, cy, r) {
-  const grad = g.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r);
-  grad.addColorStop(0, '#2a5a8a');
-  grad.addColorStop(1, '#0f2745');
-  g.fillStyle = grad;
-  g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
-  shadeSphereDirectional(g, cx, cy, r, 1, 0); // lit toward the sun marker (+X)
-
-  // Soft atmosphere rim, matching the Globe view's technique
-  g.save();
-  g.globalCompositeOperation = 'lighter';
-  const aGrad = g.createRadialGradient(cx, cy, r * 0.85, cx, cy, r * 1.08);
-  aGrad.addColorStop(0, 'rgba(100,180,255,0)');
-  aGrad.addColorStop(1, 'rgba(100,180,255,0.16)');
-  g.fillStyle = aGrad;
-  g.beginPath(); g.arc(cx, cy, r * 1.08, 0, Math.PI * 2); g.fill();
-  g.restore();
-}
-
-function drawCityTrail(g, cx, cy, cam, city, planetR) {
-  const pts = [];
-  for (let i = 0; i < ORBIT_TRAIL_SAMPLES; i++) {
-    const a = city.angle - (1 - i / (ORBIT_TRAIL_SAMPLES - 1)) * ORBIT_TRAIL_SPAN;
-    pts.push(projectCore(cx, cy, cam, city.orbitPx, a));
+const SKY_STAR_COUNT = 90;
+function buildSkyStars(tz) {
+  const rand = mulberry32(hashStringToSeed(tz));
+  const stars = [];
+  for (let i = 0; i < SKY_STAR_COUNT; i++) {
+    stars.push({
+      x: rand(), y: rand() * 0.82,
+      r: 0.6 + rand() * 1.1,
+      base: 0.35 + rand() * 0.65,
+      phase: rand() * Math.PI * 2,
+    });
   }
-  drawTaperedTrail(g, pts, city.color, planetR * 1.2, 0.4);
+  return stars;
 }
 
-function drawCityLabel(g, pos, planetR, city) {
-  // All sizes in device px: the canvas has no dpr transform, so CSS-px font
-  // sizes would render half-size on retina displays.
-  const s = orbitDpr;
-  const timeStr = `${city.t.h}:${city.t.m}`;
-  g.textAlign = 'center';
-  g.textBaseline = 'alphabetic';
-  const y = pos.y - planetR - 8 * s;
+const SKY_SAMPLES = 49;
+const SKY_ALT_MAX = 80; // degrees mapped to the panel's top padding
 
-  g.font = `700 ${11 * s}px "Segoe UI", sans-serif`;
-  g.fillStyle = 'rgba(0,0,0,0.7)';
-  g.fillText(timeStr, pos.x + s, y + s);
-  g.fillStyle = city.isDay ? '#fde68a' : '#c7d2fe';
-  g.fillText(timeStr, pos.x, y);
-
-  g.font = `${9 * s}px "Segoe UI", sans-serif`;
-  g.fillStyle = 'rgba(0,0,0,0.7)';
-  g.fillText(city.zone.label, pos.x + s, y + 13 * s + s);
-  g.fillStyle = '#94a3b8';
-  g.fillText(city.zone.label, pos.x, y + 13 * s);
-  g.textAlign = 'left';
+function skyGeometry(h) {
+  const topPad = h * 0.06;
+  const horizonY = h * 0.74;
+  return { topPad, horizonY, pxPerDeg: (horizonY - topPad) / SKY_ALT_MAX };
+}
+function skyXY(geo, w, dayFrac, altDeg) {
+  return { x: dayFrac * w, y: geo.horizonY - altDeg * geo.pxPerDeg };
 }
 
-function drawOrbitBodies(g, cx, cy, cam, maxR, earthR, cities) {
-  const n = cities.length;
-  const planetR = maxR * 0.045;
-  const depths = cities.map(city => projectCore(cx, cy, cam, city.orbitPx, city.angle).depth);
-  const order = cities.map((_, i) => i);
-  for (let i = 1; i < n; i++) { // insertion sort: far/back first
-    const k = order[i], dk = depths[k]; let j = i - 1;
-    while (j >= 0 && depths[order[j]] > dk) { order[j + 1] = order[j]; j--; }
-    order[j + 1] = k;
+// Samples the sun & moon altitude across the city's local day (today), plus
+// their exact position "now". Pure function of (zone, ms) — no stored
+// history — so it's correct under time-travel scrub, pause, and reverse.
+// The UTC offset is sampled once and assumed constant across the day (wrong
+// only on the rare DST-transition day, and only by the transition's size).
+function skyPanelState(zone, ms) {
+  const offsetMin = utcOffsetMinutes(zone.tz, new Date(ms));
+  const localMs = ms + offsetMin * 60000;
+  const dayStartLocalMs = Math.floor(localMs / 86400000) * 86400000;
+  const dayFracNow = (localMs - dayStartLocalMs) / 86400000;
+
+  const sunPath = [], moonPath = [];
+  for (let i = 0; i < SKY_SAMPLES; i++) {
+    const dayFrac = i / (SKY_SAMPLES - 1);
+    const sampleUtcMs = dayStartLocalMs + dayFrac * 86400000 - offsetMin * 60000;
+    const sunSub = mapSubPoint(sunEclipticLonDeg(sampleUtcMs), sampleUtcMs);
+    const moonSub = mapSubPoint(moonEclipticLonDeg(sampleUtcMs), sampleUtcMs);
+    sunPath.push({ dayFrac, alt: skyAltitudeDeg(zone, sunSub) });
+    moonPath.push({ dayFrac, alt: skyAltitudeDeg(zone, moonSub) });
   }
 
-  let earthDrawn = false;
-  for (let idx = 0; idx < n; idx++) {
-    const i = order[idx];
-    const city = cities[i];
-    if (!earthDrawn && depths[i] >= 0) { drawEarth(g, cx, cy, earthR); earthDrawn = true; }
+  const sunSubNow = mapSubPoint(sunEclipticLonDeg(ms), ms);
+  const moonSubNow = mapSubPoint(moonEclipticLonDeg(ms), ms);
+  return {
+    dayFracNow,
+    sunAltNow: skyAltitudeDeg(zone, sunSubNow),
+    moonAltNow: skyAltitudeDeg(zone, moonSubNow),
+    sunPath, moonPath,
+  };
+}
 
-    if (Settings.get('trails') && !effectiveReduceMotion()) drawCityTrail(g, cx, cy, cam, city, planetR);
+// Draws one polyline in two clipped passes (solid above the horizon, dashed
+// and dim below) so crossing points read correctly with no manual splitting.
+function drawSkyPath(g, geo, w, h, path, colorRgb) {
+  const strokeIt = (dashed) => {
+    g.save();
+    g.beginPath();
+    if (dashed) g.rect(0, geo.horizonY, w, h - geo.horizonY);
+    else g.rect(0, 0, w, geo.horizonY);
+    g.clip();
+    g.beginPath();
+    path.forEach((p, i) => {
+      const pos = skyXY(geo, w, p.dayFrac, p.alt);
+      if (i === 0) g.moveTo(pos.x, pos.y); else g.lineTo(pos.x, pos.y);
+    });
+    g.lineWidth = Math.max(1, h * 0.003);
+    g.strokeStyle = skyRgb(colorRgb, dashed ? 0.22 : 0.55);
+    if (dashed) g.setLineDash([4, 5]);
+    g.stroke();
+    if (dashed) g.setLineDash([]);
+    g.restore();
+  };
+  strokeIt(false);
+  strokeIt(true);
+}
 
-    const pos = projectCore(cx, cy, cam, city.orbitPx, city.angle);
-    g.fillStyle = city.color;
-    g.beginPath(); g.arc(pos.x, pos.y, planetR, 0, Math.PI * 2); g.fill();
-    shadeSphereDirectional(g, pos.x, pos.y, planetR, 1, 0);
-
-    if (Settings.get('orbitLabels')) drawCityLabel(g, pos, planetR, city);
+function drawSkyDisc(g, pos, r, grad0, grad1, glow) {
+  if (glow) {
+    const gg = g.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, r * 3.4);
+    gg.addColorStop(0, glow);
+    gg.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gg;
+    g.beginPath(); g.arc(pos.x, pos.y, r * 3.4, 0, Math.PI * 2); g.fill();
   }
-  if (!earthDrawn) drawEarth(g, cx, cy, earthR);
+  const disc = g.createRadialGradient(pos.x - r * 0.3, pos.y - r * 0.3, r * 0.2, pos.x, pos.y, r);
+  disc.addColorStop(0, grad0);
+  disc.addColorStop(1, grad1);
+  g.fillStyle = disc;
+  g.beginPath(); g.arc(pos.x, pos.y, r, 0, Math.PI * 2); g.fill();
 }
 
-function orderedZonesByOffset(at) {
-  return ZONES
-    .map(zone => ({ zone, offset: utcOffsetMinutes(zone.tz, at) }))
-    .sort((a, b) => a.offset - b.offset)
-    .map(({ zone }) => zone);
-}
-
-function buildOrbitCities(maxR, at) {
-  const ordered = orderedZonesByOffset(at);
-  const n = ordered.length;
-  return ordered.map((zone, i) => {
-    const frac = n === 1 ? 0 : i / (n - 1);
-    const orbitPx = maxR * (ORBIT_INNER_FRAC + (ORBIT_OUTER_FRAC - ORBIT_INNER_FRAC) * frac);
-    const angle = orbitAngleAt(zone.tz, at);
-    const t = getTimeParts(zone.tz);
-    return { zone, orbitPx, angle, t, isDay: t.isDay, color: t.isDay ? '#facc15' : '#6366f1' };
-  });
-}
-
-function drawOrbit(now) {
-  orbitDpr = sizeCanvas(orbitCanvas);
-  const w = orbitCanvas.width, h = orbitCanvas.height;
-  orbitCtx.clearRect(0, 0, w, h);
+function drawSkyPanel(panel, perfNow) {
+  const dpr = sizeCanvas(panel.canvas);
+  panel.dpr = dpr;
+  const w = panel.canvas.width, h = panel.canvas.height;
+  const g = panel.ctx;
+  g.clearRect(0, 0, w, h);
   if (w === 0 || h === 0) return;
 
-  const maxR = Math.min(w, h) * 0.42;
-  const cx = w / 2, cy = h / 2;
-  const cam = { zoom: 1, tiltY: 0.55 };
-  const earthR = maxR * 0.14;
-  const at = Clock.now();
-  const cities = buildOrbitCities(maxR, at);
+  const geo = skyGeometry(h);
+  const simMs = Clock.now().getTime();
+  const state = skyPanelState(panel.zone, simMs);
+  const pal = skyPalette(state.sunAltNow);
+  const twilight = Math.max(0, Math.min(1, (-state.sunAltNow - 6) / 12));
 
-  if (Settings.get('orbitRings')) {
-    cities.forEach(city => strokeOrbitRing(orbitCtx, cx, cy, cam, city.orbitPx, { lineWidth: orbitDpr }));
+  // Sky gradient (zenith -> horizon), ground continues the horizon tone
+  const skyGrad = g.createLinearGradient(0, 0, 0, geo.horizonY);
+  skyGrad.addColorStop(0, skyRgb(pal.zenith));
+  skyGrad.addColorStop(1, skyRgb(pal.horizon));
+  g.fillStyle = skyGrad;
+  g.fillRect(0, 0, w, geo.horizonY);
+  g.fillStyle = skyRgb(pal.horizon);
+  g.fillRect(0, geo.horizonY, w, h - geo.horizonY);
+
+  // Stars, fading in through dusk
+  if (Settings.get('skyStars') && twilight > 0) {
+    const twinkling = skyAnimActive();
+    const t = perfNow / 1000;
+    for (const s of panel.stars) {
+      const a = twilight * s.base * (twinkling ? 0.55 + 0.45 * Math.sin(t * 1.6 + s.phase) : 1);
+      if (a <= 0.02) continue;
+      g.fillStyle = `rgba(226,232,240,${a.toFixed(3)})`;
+      g.beginPath(); g.arc(s.x * w, s.y * geo.horizonY, s.r * dpr, 0, Math.PI * 2); g.fill();
+    }
   }
-  drawSunGlow(orbitCtx, cx, cy, cam, maxR);
-  drawOrbitBodies(orbitCtx, cx, cy, cam, maxR, earthR, cities);
+
+  // Sun & moon paths across today, plus sunrise/sunset ticks at the path's
+  // own horizon crossings (guarantees exact alignment with the drawn curve).
+  if (Settings.get('skyArcs')) {
+    drawSkyPath(g, geo, w, h, state.moonPath, [180, 190, 208]);
+    drawSkyPath(g, geo, w, h, state.sunPath, [255, 200, 110]);
+    g.fillStyle = 'rgba(255,216,140,0.7)';
+    for (let i = 1; i < state.sunPath.length; i++) {
+      const a0 = state.sunPath[i - 1].alt, a1 = state.sunPath[i].alt;
+      if ((a0 < 0) === (a1 < 0)) continue;
+      const f = a0 / (a0 - a1);
+      const dayFrac = state.sunPath[i - 1].dayFrac + f * (state.sunPath[i].dayFrac - state.sunPath[i - 1].dayFrac);
+      g.beginPath(); g.arc(dayFrac * w, geo.horizonY, 2.2 * dpr, 0, Math.PI * 2); g.fill();
+    }
+  }
+
+  // Sun disc "now"
+  {
+    const pos = skyXY(geo, w, state.dayFracNow, state.sunAltNow);
+    const above = state.sunAltNow >= 0;
+    drawSkyDisc(g, pos, h * 0.032,
+      above ? '#fff7dd' : '#c9a86a', above ? '#ffd87a' : '#7a6438',
+      above ? 'rgba(255,216,122,0.45)' : null);
+  }
+
+  // Moon disc "now" — phase shaded via its position relative to the sun's
+  // on-panel position, the same technique the Map view's glyph uses.
+  {
+    const sunPos = skyXY(geo, w, state.dayFracNow, state.sunAltNow);
+    const moonPos = skyXY(geo, w, state.dayFracNow, state.moonAltNow);
+    const r = h * 0.026;
+    const ldx = sunPos.x - moonPos.x, ldy = sunPos.y - moonPos.y;
+    const len = Math.hypot(ldx, ldy) || 1;
+    g.save();
+    g.globalAlpha = state.moonAltNow >= 0 ? 1 : 0.25;
+    const grad = g.createRadialGradient(moonPos.x - r * 0.3, moonPos.y - r * 0.3, r * 0.2, moonPos.x, moonPos.y, r);
+    grad.addColorStop(0, '#d8dce4');
+    grad.addColorStop(1, '#9aa2ae');
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(moonPos.x, moonPos.y, r, 0, Math.PI * 2); g.fill();
+    shadeSphereDirectional(g, moonPos.x, moonPos.y, r, ldx / len, ldy / len);
+    g.restore();
+  }
+
+  // Ground overlay: dims what's below the horizon without fully hiding it
+  const groundGrad = g.createLinearGradient(0, geo.horizonY, 0, h);
+  groundGrad.addColorStop(0, 'rgba(4,6,16,0.35)');
+  groundGrad.addColorStop(1, 'rgba(4,6,16,0.82)');
+  g.fillStyle = groundGrad;
+  g.fillRect(0, geo.horizonY, w, h - geo.horizonY);
+  g.strokeStyle = 'rgba(226,232,240,0.18)';
+  g.lineWidth = dpr;
+  g.beginPath(); g.moveTo(0, geo.horizonY); g.lineTo(w, geo.horizonY); g.stroke();
 }
 
-function orbitAnimActive() {
-  return isOrbitViewActive() && !effectiveReduceMotion();
+function isSkyViewActive() {
+  const el = document.getElementById('view-sky');
+  return !!el && el.classList.contains('active');
+}
+function skyAnimActive() {
+  return isSkyViewActive() && Settings.get('skyStars') && !effectiveReduceMotion();
 }
 
-function refreshOrbit() {
-  if (isOrbitViewActive()) drawOrbit(performance.now());
+const skyGridEl = document.getElementById('sky-grid');
+const SkyPanels = ZONES.map(zone => {
+  const root = document.createElement('div');
+  root.className = 'sky-panel';
+  root.innerHTML = `
+    <canvas class="sky-canvas"></canvas>
+    <div class="sky-header">
+      <div class="location-label">${zone.label}</div>
+      <div class="time-display">00:00</div>
+      <div class="sun-times"></div>
+      <div class="date-info"></div>
+    </div>
+  `;
+  attachZoneTooltip(root, zone);
+  skyGridEl.appendChild(root);
+  const canvas = root.querySelector('.sky-canvas');
+  return {
+    zone, root, canvas,
+    ctx: canvas.getContext('2d'),
+    timeEl: root.querySelector('.time-display'),
+    sunTimesEl: root.querySelector('.sun-times'),
+    dateEl: root.querySelector('.date-info'),
+    stars: buildSkyStars(zone.tz),
+    dpr: 1,
+  };
+});
+
+function drawSkyAll(perfNow) {
+  SkyPanels.forEach(panel => drawSkyPanel(panel, perfNow));
+}
+
+function refreshSky() {
+  if (isSkyViewActive()) drawSkyAll(performance.now());
   Renderer.ensureLoop();
 }
 
-// Hover info cards for the canvas-drawn cities (mirrors drawOrbit's geometry)
-orbitCanvas.addEventListener('mousemove', e => {
-  if (!Settings.get('tooltips') || !isOrbitViewActive()) return;
-  const rect = orbitCanvas.getBoundingClientRect();
-  if (rect.width === 0) return;
-  const px = (e.clientX - rect.left) * (orbitCanvas.width / rect.width);
-  const py = (e.clientY - rect.top) * (orbitCanvas.height / rect.height);
-  const w = orbitCanvas.width, h = orbitCanvas.height;
-  const maxR = Math.min(w, h) * 0.42;
-  const cam = { zoom: 1, tiltY: 0.55 };
-  const planetR = maxR * 0.045;
-  const cities = buildOrbitCities(maxR, Clock.now());
-  let hit = null, best = -Infinity;
-  for (const city of cities) {
-    const pos = projectCore(w / 2, h / 2, cam, city.orbitPx, city.angle);
-    const dx = pos.x - px, dy = pos.y - py;
-    const pr = planetR * 1.6;
-    if (dx * dx + dy * dy <= pr * pr && pos.depth > best) { hit = city; best = pos.depth; }
-  }
-  if (hit) showZoneTooltipAt(e.clientX, e.clientY, hit.zone, 'orbit');
-  else if (wcTooltipTarget === 'orbit') hideZoneTooltip();
-});
-orbitCanvas.addEventListener('mouseleave', () => { if (wcTooltipTarget === 'orbit') hideZoneTooltip(); });
+Renderer.register('sky', { when: skyAnimActive, draw: drawSkyAll });
+window.addEventListener('resize', () => { if (isSkyViewActive()) drawSkyAll(performance.now()); });
 
-Renderer.register('orbit', { when: orbitAnimActive, draw: drawOrbit });
-window.addEventListener('resize', () => { if (isOrbitViewActive()) drawOrbit(performance.now()); });
-
-function updateOrbit() {
-  drawOrbit(performance.now());
+function updateSky() {
+  const now = Clock.now();
+  const nowMs = now.getTime();
+  SkyPanels.forEach(panel => {
+    const t = getTimeParts(panel.zone.tz);
+    panel.timeEl.textContent = fmtTime(t);
+    panel.dateEl.innerHTML = `${dotHTML(t.isDay)}${t.dateStr}`;
+    const sun = sunTimesUtc(panel.zone.lat, panel.zone.lon, nowMs);
+    let sunStr;
+    if (sun.polar === 'day') sunStr = 'Sun up all day';
+    else if (sun.polar === 'night') sunStr = 'Sun down all day';
+    else {
+      const f = (ms) => new Intl.DateTimeFormat('en-GB', { timeZone: panel.zone.tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms));
+      sunStr = `↑ ${f(sun.rise)} · ↓ ${f(sun.set)}`;
+    }
+    panel.sunTimesEl.textContent = sunStr;
+  });
+  drawSkyAll(performance.now());
 }
 
 // ═══════════════════════════════════════
@@ -3602,7 +3744,7 @@ function tick() {
     case 'globe':   updateGlobe(); break;
     case 'map':     updateMap(); break;
     case 'horizon': updateHorizon(); break;
-    case 'orbit':   updateOrbit(); break;
+    case 'sky':     updateSky(); break;
     case 'solar':   updateSolar(); break;
   }
   refreshTimeHud();
@@ -3610,9 +3752,9 @@ function tick() {
 tick();
 setInterval(tick, 1000);
 
-// Restore saved view
+// Restore saved view (migrates the old 'orbit' view, since replaced by 'sky')
 const saved = localStorage.getItem('worldclock-view');
-if (saved) switchView(saved);
+if (saved) switchView(saved === 'orbit' ? 'sky' : saved);
 </script>
 </body>
 </html>

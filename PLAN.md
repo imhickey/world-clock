@@ -294,6 +294,32 @@ space so text stays crisp; pan clamped so the world always covers the
 frame). Settings: `mapTerminator`, `mapSunMoon` (Views group, ?fx-aware).
 Verified by verify-map.mjs (26 checks) + full regression sweep.
 
+Orbit → Sky replacement (post-v2.0, IMPLEMENTED): the "cities as planets"
+Orbit view was visually unpopular and has been fully replaced (view slot 6,
+key `6`, 🪐 → 🌅), not hidden — its module, canvas, and settings rows are
+deleted. New view: a 3×2 grid (2×3 tablet, 1×6 mobile) of six live sky
+panels, one per city, showing the sun's and moon's real altitude across
+today. Altitude of a body from a city reuses the Map view's sub-point math
+(`mapSubPoint` → sin/cos altitude identity) evaluated per-city instead of
+per-pixel; the sky is colored by a 7-stop gradient keyed on the sun's live
+altitude (day blue → golden hour → civil/nautical dusk → night navy), stars
+fade in through twilight (rAF-driven twinkle only, gated by reduce-motion —
+the once-a-second position/header update is not), and the moon disc is phase-
+shaded toward the sun's on-panel position (same technique as the Map glyph).
+Sunrise/sunset tick marks are read directly off the sampled path's own
+horizon crossings, guaranteeing pixel alignment with the drawn curve.
+`hexToRgba`, `projectCore`, `shadeSphereDirectional`, `strokeOrbitRing`, and
+`utcOffsetMinutes` — all genuinely shared with Globe/Map/Solar — were
+relocated out of the old Orbit module into the SHARED CANVAS & TIME HELPERS
+section rather than deleted. Settings: `skyArcs`, `skyStars` (Views group,
+?fx-aware, replacing `orbitRings`/`orbitLabels`). Saved-view localStorage
+migrates `'orbit'` → `'sky'` transparently. Hover uses `attachZoneTooltip`
+directly on each panel div (no canvas hit-testing needed, unlike Orbit's).
+Verified by verify-sky.mjs (28 checks); verify-phase5.mjs (the old Orbit
+suite) is retired/deleted — superseded. Phase-6 and Phase-78 suites' Orbit-
+specific assertions were ported to equivalent Sky-view checks (scrub
+propagation via `skyPanelState().dayFracNow`; hover via a Sky panel).
+
 ## Workflow
 
 - Branch per phase: `feature/p1-starfield`, etc.; merge to `main` when accepted.
