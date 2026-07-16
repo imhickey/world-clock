@@ -136,6 +136,17 @@ body.no-seconds .analog-second { display: none; }
   color: #475569;
   letter-spacing: 0.05em;
 }
+/* ── Live temperature (Open-Meteo) ── */
+.temp-display {
+  font-size: 0.7rem;
+  color: #64748b;
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.temp-display:empty { display: none; }        /* no data yet -> no blank gap */
+body.no-temp .temp-display { display: none; } /* settings toggle, no reload */
+body.time-scrubbed .temp-display { opacity: 0.5; } /* real weather during time travel */
 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
 .dot.day   { background: #facc15; box-shadow: 0 0 6px #facc1580; }
 .dot.night { background: #6366f1; box-shadow: 0 0 6px #6366f180; }
@@ -158,6 +169,7 @@ body.no-seconds .analog-second { display: none; }
 }
 .clock-cell.is-day .location-label { color: #d4a574; }
 .clock-cell.is-day .date-info { color: #92724a; }
+.clock-cell.is-day .temp-display { color: #92724a; }
 .clock-cell.is-day .analog-face { fill: #1a2d4a; stroke: rgba(251,191,36,0.22); }
 .clock-cell.is-day .analog-marker { stroke: #5a6a80; }
 .clock-cell.is-day .digit-tile { background: #1a2d4a; box-shadow: 0 2px 8px rgba(251,191,36,0.08); }
@@ -168,6 +180,7 @@ body.no-seconds .analog-second { display: none; }
 }
 .clock-cell.is-night .location-label { color: #7c8db5; }
 .clock-cell.is-night .date-info { color: #4a5580; }
+.clock-cell.is-night .temp-display { color: #4a5580; }
 .clock-cell.is-night .analog-face { fill: #111827; stroke: rgba(99,102,241,0.22); }
 .clock-cell.is-night .analog-digital { color: #d4940a; }
 .clock-cell.is-night .digit-tile { background: #111827; box-shadow: 0 2px 8px rgba(99,102,241,0.06); }
@@ -180,12 +193,14 @@ body.no-seconds .analog-second { display: none; }
   background: rgba(251,191,36,0.06);
 }
 .globe-card.is-day .location-label { color: #d4a574; }
+.globe-card.is-day .temp-display { color: #92724a; }
 .globe-card.is-night {
   border-color: rgba(99,102,241,0.22);
   background: rgba(99,102,241,0.05);
 }
 .globe-card.is-night .location-label { color: #7c8db5; }
 .globe-card.is-night .time-display { color: #d4940a; }
+.globe-card.is-night .temp-display { color: #4a5580; }
 
 .clock-grid {
   display: grid;
@@ -423,6 +438,10 @@ body.analog-trails-on .analog-second { display: none; }
   font-size: 0.6rem;
   text-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
+.map-label .temp-display {
+  font-size: 0.6rem;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
 
 /* ═══════════════════════════════════════
    VIEW 5: HORIZON STRIP
@@ -482,6 +501,7 @@ body.analog-trails-on .analog-second { display: none; }
   font-variant-numeric: tabular-nums;
 }
 .horizon-marker .tag .location-label { font-size: 0.6rem; }
+.horizon-marker .tag .temp-display { font-size: 0.55rem; color: #94a3b8; }
 
 /* ═══════════════════════════════════════
    VIEW 6: SKY (six live sun/moon sky panels)
@@ -545,6 +565,11 @@ body.analog-trails-on .analog-second { display: none; }
   color: #94a3b8;
   text-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
+.sky-header .temp-display {
+  font-size: 0.56rem;
+  color: #cbd5e1;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
 @media (max-width: 900px) {
   .sky-grid { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(3, 1fr); }
 }
@@ -589,6 +614,7 @@ body.analog-trails-on .analog-second { display: none; }
   .map-label .time-display { font-size: 0.85rem; }
   .map-label .location-label { font-size: 0.55rem; }
   .map-label .date-info { display: none; }
+  .map-label .temp-display { display: none; }
   .map-container { max-height: 70vw; }
   .horizon-bar-area { height: 180px; }
   .horizon-marker .pin { height: 180px; }
@@ -948,6 +974,7 @@ const DEFAULTS = {
   globeMoon: true,
   mapTerminator: true,
   mapSunMoon: true,
+  showTemp: true, // live temperature per city (°C · °F, via Open-Meteo)
   tooltips: true, // generic key — Phase 7's DOM tooltips will reuse it
   timeControls: true,
   fps: false,
@@ -956,8 +983,9 @@ const DEFAULTS = {
 };
 // Boolean feature flags only — non-boolean settings (reduceMotion tristate,
 // solarLapseRate number) must not be clobbered by the ?fx=off/all overrides.
-// fps and ecoMode are meta/performance switches, not ambience effects.
-const AMBIENCE_KEYS = Object.keys(DEFAULTS).filter(k => typeof DEFAULTS[k] === 'boolean' && k !== 'fps' && k !== 'ecoMode');
+// fps and ecoMode are meta/performance switches, and showTemp is data, not
+// an ambience effect.
+const AMBIENCE_KEYS = Object.keys(DEFAULTS).filter(k => typeof DEFAULTS[k] === 'boolean' && k !== 'fps' && k !== 'ecoMode' && k !== 'showTemp');
 
 const Settings = (() => {
   let state = { ...DEFAULTS };
@@ -1757,6 +1785,7 @@ function fmtHudDuration(ms) {
 }
 
 function refreshTimeHud() {
+  document.body.classList.toggle('time-scrubbed', !Clock.live());
   const on = Settings.get('timeControls');
   timeHudEl.classList.toggle('show', on);
   if (!on) { timeScrubberEl.classList.remove('show'); return; }
@@ -2179,6 +2208,7 @@ const SETTINGS_SCHEMA = [
     { key: 'globeMoon', label: 'Globe: real-position moon', type: 'bool', onChange: refreshGlobeMoon },
     { key: 'mapTerminator', label: 'Map: day/night shading', type: 'bool', onChange: refreshMap },
     { key: 'mapSunMoon', label: 'Map: sun & moon markers', type: 'bool', onChange: refreshMap },
+    { key: 'showTemp', label: 'Live temperature (°C · °F)', type: 'bool', onChange: applyTempState },
     { key: 'horizonGlow', label: 'Horizon: sun & moon glow', type: 'bool', onChange: refreshHorizonGlow },
     { key: 'trails', label: 'Motion trails', type: 'bool', onChange: () => { refreshAnalogTrails(); refreshSolar(); } },
     { key: 'skyArcs', label: 'Sky: sun & moon paths', type: 'bool', onChange: refreshSky },
@@ -2337,6 +2367,85 @@ function dotHTML(isDay) {
   return `<span class="daynight-icon">${icon}</span><span class="dot ${isDay?'day':'night'}"></span>`;
 }
 
+// ═══════════════════════════════════════
+// WEATHER (live temperature via Open-Meteo — free, keyless, CORS-enabled)
+// ═══════════════════════════════════════
+// One batched request covers all zones. Real-time only: keys off wall-clock
+// (Date.now()), never Clock.now(), so time-travel shows current real temps
+// (dimmed via body.time-scrubbed). Solar view is a single canvas scene with
+// no per-city cards, so it intentionally has no temperature display.
+const WEATHER_KEY = 'worldclock-weather-v1';
+const WEATHER_REFRESH_MS = 10 * 60 * 1000;  // re-fetch cadence
+const WEATHER_STALE_MS   = 15 * 60 * 1000;  // refetch-on-tab-wake threshold
+
+const Weather = (() => {
+  let temps = {};      // tz -> °C (number), last known
+  let fetchedAt = 0;   // epoch ms of last successful fetch
+  let inflight = false;
+
+  // Hydrate from localStorage: reload shows temps instantly, offline keeps last-known.
+  try {
+    const stored = JSON.parse(localStorage.getItem(WEATHER_KEY) || '{}');
+    if (stored && typeof stored.temps === 'object') {
+      temps = stored.temps || {};
+      fetchedAt = stored.fetchedAt || 0;
+    }
+  } catch { /* corrupt cache — start empty */ }
+
+  async function refresh() {
+    if (inflight) return;
+    inflight = true;
+    try {
+      const lats = ZONES.map(z => z.lat).join(',');
+      const lons = ZONES.map(z => z.lon).join(',');
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&current=temperature_2m`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      // Multi-location responses are an array in request order; normalize defensively.
+      const list = Array.isArray(data) ? data : [data];
+      const next = {};
+      ZONES.forEach((zone, i) => {
+        const c = list[i] && list[i].current && list[i].current.temperature_2m;
+        if (typeof c === 'number') next[zone.tz] = c;
+      });
+      if (Object.keys(next).length) {
+        temps = { ...temps, ...next }; // partial responses keep old values
+        fetchedAt = Date.now();
+        try { localStorage.setItem(WEATHER_KEY, JSON.stringify({ fetchedAt, temps })); } catch {}
+      }
+    } catch { /* silent — keep stale values; retry on next interval */ }
+    inflight = false;
+  }
+
+  // "18°C · 64°F" for the zone, or '' if we've never had data.
+  function tempString(zone) {
+    const c = temps[zone.tz];
+    if (typeof c !== 'number') return '';
+    return `${Math.round(c)}°C · ${Math.round(c * 9 / 5 + 32)}°F`;
+  }
+
+  refresh();                                // startup fetch (cache already shown)
+  setInterval(refresh, WEATHER_REFRESH_MS); // periodic refresh
+  // Background tabs throttle timers — catch up when the tab wakes.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && Date.now() - fetchedAt > WEATHER_STALE_MS) refresh();
+  });
+
+  return { tempString, refresh };
+})();
+
+// Shared per-view render helper — every view funnels through this one path.
+function setTemp(el, zone) {
+  if (!el) return;
+  el.textContent = Weather.tempString(zone); // '' -> :empty -> display:none
+}
+
+function applyTempState() {
+  document.body.classList.toggle('no-temp', !Settings.get('showTemp'));
+}
+applyTempState();
+
 // ── Seconds Toggle ──
 let showSeconds = localStorage.getItem('worldclock-seconds') === 'on';
 const secBtn = document.getElementById('sec-toggle');
@@ -2457,16 +2566,19 @@ ZONES.forEach(zone => {
   });
   const dateLine = document.createElement('div');
   dateLine.className = 'date-info';
+  const tempLine = document.createElement('div');
+  tempLine.className = 'temp-display';
   cell.appendChild(row);
   cell.appendChild(dateLine);
+  cell.appendChild(tempLine);
   attachZoneTooltip(cell, zone);
   document.getElementById('flip-grid').appendChild(cell);
-  flipDigits.push({ zone, d, dateLine, cell });
+  flipDigits.push({ zone, d, dateLine, tempLine, cell });
 });
 
 function updateFlip() {
   const suppressAnim = shouldSuppressFlipAnim();
-  flipDigits.forEach(({zone, d, dateLine, cell}) => {
+  flipDigits.forEach(({zone, d, dateLine, tempLine, cell}) => {
     const t = getTimeParts(zone.tz);
     [['h0',t.h[0]],['h1',t.h[1]],['m0',t.m[0]],['m1',t.m[1]],['s0',t.s[0]],['s1',t.s[1]]].forEach(([k,v]) => {
       const tile = d[k];
@@ -2481,6 +2593,7 @@ function updateFlip() {
       }
     });
     dateLine.innerHTML = `${dotHTML(t.isDay)}${t.dateStr}`;
+    setTemp(tempLine, zone);
     cell.classList.toggle('is-day', t.isDay);
     cell.classList.toggle('is-night', !t.isDay);
   });
@@ -2541,17 +2654,20 @@ ZONES.forEach(zone => {
   digital.className = 'analog-digital';
   const dateLine = document.createElement('div');
   dateLine.className = 'date-info';
+  const tempLine = document.createElement('div');
+  tempLine.className = 'temp-display';
 
   cell.appendChild(svg);
   cell.appendChild(digital);
   cell.appendChild(dateLine);
+  cell.appendChild(tempLine);
   attachZoneTooltip(cell, zone);
   document.getElementById('analog-grid').appendChild(cell);
-  analogClocks.push({ zone, svg, hourH, minH, secH, digital, dateLine, cell });
+  analogClocks.push({ zone, svg, hourH, minH, secH, digital, dateLine, tempLine, cell });
 });
 
 function updateAnalog() {
-  analogClocks.forEach(({zone, hourH, minH, secH, digital, dateLine, cell}) => {
+  analogClocks.forEach(({zone, hourH, minH, secH, digital, dateLine, tempLine, cell}) => {
     const t = getTimeParts(zone.tz);
     const hNum = parseInt(t.h), mNum = parseInt(t.m), sNum = parseInt(t.s);
     const hAng = ((hNum%12)*30 + mNum*0.5) * Math.PI/180;
@@ -2567,6 +2683,7 @@ function updateAnalog() {
     setHand(secH, sAng, 75);
     digital.textContent = fmtTime(t);
     dateLine.innerHTML = `${dotHTML(t.isDay)}${t.dateStr}`;
+    setTemp(tempLine, zone);
     cell.classList.toggle('is-day', t.isDay);
     cell.classList.toggle('is-night', !t.isDay);
   });
@@ -2584,20 +2701,23 @@ ZONES.forEach(zone => {
     <div class="location-label">${zone.label}</div>
     <div class="time-display">00:00:00</div>
     <div class="date-info"></div>
+    <div class="temp-display"></div>
   `;
   attachZoneTooltip(card, zone);
   document.getElementById('globe-grid').appendChild(card);
   globeCards.push({ zone, card,
     timeEl: card.querySelector('.time-display'),
-    dateEl: card.querySelector('.date-info')
+    dateEl: card.querySelector('.date-info'),
+    tempEl: card.querySelector('.temp-display')
   });
 });
 
 function updateGlobe() {
-  globeCards.forEach(({zone, timeEl, dateEl, card}) => {
+  globeCards.forEach(({zone, timeEl, dateEl, tempEl, card}) => {
     const t = getTimeParts(zone.tz);
     timeEl.textContent = fmtTime(t);
     dateEl.innerHTML = `${dotHTML(t.isDay)}${t.dateStr}`;
+    setTemp(tempEl, zone);
     card.classList.toggle('is-day', t.isDay);
     card.classList.toggle('is-night', !t.isDay);
   });
@@ -2653,12 +2773,14 @@ ZONES.forEach(zone => {
     <div class="time-display">00:00</div>
     <div class="location-label">${zone.label}</div>
     <div class="date-info"></div>
+    <div class="temp-display"></div>
   `;
   mapContainer.appendChild(lbl);
 
   mapLabels.push({ zone, pos, dot, lbl,
     timeEl: lbl.querySelector('.time-display'),
-    dateEl: lbl.querySelector('.date-info')
+    dateEl: lbl.querySelector('.date-info'),
+    tempEl: lbl.querySelector('.temp-display')
   });
 });
 
@@ -2877,10 +2999,11 @@ window.addEventListener('resize', () => { if (isMapViewActive()) applyMapCam(); 
 setMapCanvasPresent(Settings.get('mapTerminator') || Settings.get('mapSunMoon'));
 
 function updateMap() {
-  mapLabels.forEach(({zone, timeEl, dateEl}) => {
+  mapLabels.forEach(({zone, timeEl, dateEl, tempEl}) => {
     const t = getTimeParts(zone.tz);
     timeEl.textContent = fmtTime(t);
     dateEl.innerHTML = `${dotHTML(t.isDay)}${t.dateStr}`;
+    setTemp(tempEl, zone);
   });
   // Repositions dots/labels and redraws the terminator — runs at 1Hz via
   // tick(), per-frame during time-scrubbing (the 'time-scrub' consumer calls
@@ -2907,23 +3030,26 @@ ZONES.forEach(zone => {
     <div class="tag">
       <div class="time-display">00:00</div>
       <div class="location-label">${zone.label}</div>
+      <div class="temp-display"></div>
     </div>
     <div class="pin"></div>
   `;
   attachZoneTooltip(mk.querySelector('.tag'), zone);
   document.getElementById('horizon-area').appendChild(mk);
   horizonMarkers.push({ zone, mk,
-    timeEl: mk.querySelector('.time-display')
+    timeEl: mk.querySelector('.time-display'),
+    tempEl: mk.querySelector('.temp-display')
   });
 });
 
 function updateHorizon() {
-  horizonMarkers.forEach(({zone, mk, timeEl}) => {
+  horizonMarkers.forEach(({zone, mk, timeEl, tempEl}) => {
     const t = getTimeParts(zone.tz);
     const hNum = parseInt(t.h), mNum = parseInt(t.m), sNum = parseInt(t.s);
     const pct = ((hNum + mNum/60 + sNum/3600) / 24) * 100;
     mk.style.left = `${pct}%`;
     timeEl.textContent = fmtTime(t);
+    setTemp(tempEl, zone);
   });
   drawHorizonGlow(performance.now());
 }
@@ -3179,6 +3305,7 @@ const SkyPanels = ZONES.map(zone => {
       <div class="time-display">00:00</div>
       <div class="sun-times"></div>
       <div class="date-info"></div>
+      <div class="temp-display"></div>
     </div>
   `;
   attachZoneTooltip(root, zone);
@@ -3190,6 +3317,7 @@ const SkyPanels = ZONES.map(zone => {
     timeEl: root.querySelector('.time-display'),
     sunTimesEl: root.querySelector('.sun-times'),
     dateEl: root.querySelector('.date-info'),
+    tempEl: root.querySelector('.temp-display'),
     stars: buildSkyStars(zone.tz),
     dpr: 1,
   };
@@ -3214,6 +3342,7 @@ function updateSky() {
     const t = getTimeParts(panel.zone.tz);
     panel.timeEl.textContent = fmtTime(t);
     panel.dateEl.innerHTML = `${dotHTML(t.isDay)}${t.dateStr}`;
+    setTemp(panel.tempEl, panel.zone);
     const sun = sunTimesUtc(panel.zone.lat, panel.zone.lon, nowMs);
     let sunStr;
     if (sun.polar === 'day') sunStr = 'Sun up all day';
